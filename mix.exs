@@ -1,7 +1,7 @@
 defmodule AshEx4pm.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "26.9.9"
   @source_url "https://github.com/seanchatmangpt/ash_ex4pm"
 
   def project do
