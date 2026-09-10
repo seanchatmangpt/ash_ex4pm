@@ -26,6 +26,31 @@ defmodule AshEx4pm.Notifier do
   `Ex4pm.OCEL.normalize/1`'s `%Ex4pm.EventLog{}` output, which is a
   DIFFERENT real path (batch/offline normalization for
   discover/conform), not what the real-time ingest function consumes.
+
+  ## Scope: single-object events only
+
+  `build_envelope/2` always emits exactly one OCEL object -- the acting
+  resource's own `record_id` -- and one relationship entry
+  (`qualifier: "primary"` pointing at that same id). This is deliberate,
+  not an oversight: a single `Ash.Notifier.Notification` here corresponds
+  to a single resource/changeset, and `notify/1` has no reliable way to
+  recover the *actual persisted* identities of records touched via
+  `Ash.Changeset.manage_relationship/3` from that one notification alone
+  (`changeset.relationships` holds the raw pre-commit input passed to
+  `manage_relationship`, not resolved post-commit related-record ids, and
+  a single Ash action with `manage_relationship` can already produce
+  several independent `resource_notifications` -- one per affected
+  resource -- rather than one combined notification carrying the full
+  relationship set).
+
+  If an activity is genuinely relational (e.g. an order-to-line-item
+  append that should be modeled as one multi-object OCEL event), this
+  notifier is the wrong mechanism for it. Instead, add a resource-level
+  `Ash.Resource.Change` that builds and returns a manual
+  `%Ash.Notifier.Notification{}` carrying the full object/relationship
+  set for that action (see `action_input.ex`'s manual-notification
+  pattern) rather than relying on this notifier's one-object-per-action
+  default.
   """
   use Ash.Notifier
   require Logger
@@ -63,7 +88,13 @@ defmodule AshEx4pm.Notifier do
 
   def notify(_), do: :ok
 
-  defp build_envelope(activity, notification) do
+  # Public (but @doc false) so tests can inspect the real envelope shape
+  # directly -- deliberately single-object/single-relationship, see the
+  # moduledoc's "Scope: single-object events only" section for why this
+  # notifier does not attempt to recover related-record identities from
+  # `manage_relationship` calls on the same changeset.
+  @doc false
+  def build_envelope(activity, notification) do
     provenance_source =
       AshEx4pm.Info.compiled(notification.resource)[:provenance_source] || :ash_ex4pm
 

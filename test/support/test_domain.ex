@@ -10,6 +10,10 @@ defmodule AshEx4pm.Test.Order do
     activity(:order_created, on: :create)
   end
 
+  relationships do
+    has_many(:line_items, AshEx4pm.Test.LineItem)
+  end
+
   actions do
     defaults([:read, :destroy])
 
@@ -21,6 +25,13 @@ defmodule AshEx4pm.Test.Order do
     update :ship do
       accept([])
       change(set_attribute(:status, :shipped))
+    end
+
+    update :add_line_item do
+      accept([])
+      require_atomic?(false)
+      argument(:line_item, :map, allow_nil?: false)
+      change(manage_relationship(:line_item, :line_items, type: :create))
     end
   end
 
@@ -60,6 +71,31 @@ defmodule AshEx4pm.Test.Widget do
   end
 end
 
+defmodule AshEx4pm.Test.LineItem do
+  @moduledoc "Real related Ash resource -- appended via manage_relationship on Order."
+  use Ash.Resource,
+    domain: AshEx4pm.Test.Domain,
+    data_layer: Ash.DataLayer.Ets
+
+  actions do
+    defaults([:read, :destroy])
+
+    create :create do
+      primary?(true)
+      accept([:sku, :order_id])
+    end
+  end
+
+  attributes do
+    uuid_primary_key(:id)
+    attribute(:sku, :string, public?: true)
+  end
+
+  relationships do
+    belongs_to(:order, AshEx4pm.Test.Order, public?: true)
+  end
+end
+
 defmodule AshEx4pm.Test.Domain do
   @moduledoc false
   use Ash.Domain, validate_config_inclusion?: false
@@ -67,5 +103,6 @@ defmodule AshEx4pm.Test.Domain do
   resources do
     resource(AshEx4pm.Test.Order)
     resource(AshEx4pm.Test.Widget)
+    resource(AshEx4pm.Test.LineItem)
   end
 end

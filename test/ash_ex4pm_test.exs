@@ -1,5 +1,6 @@
 defmodule AshEx4pmTest do
   use ExUnit.Case, async: false
+  require Ash.Query
 
   # Real, no-mock tests: a real Ash resource (Ash.DataLayer.Ets), a real
   # create action, real AshEx4pm.Notifier firing, a real
@@ -36,6 +37,53 @@ defmodule AshEx4pmTest do
              match?(%{operation: {:ingest, :batch}}, r) and
                Map.get(r.metadata || %{}, :agent_id) == "ash_ex4pm"
            end)
+  end
+
+  test "build_envelope/2 emits only the primary object, even when the same action's real changeset carries a manage_relationship-managed related record" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    changeset =
+      order
+      |> Ash.Changeset.for_update(:add_line_item, %{line_item: %{sku: "sku-1"}})
+
+    # Real update: manage_relationship really does create a second,
+    # independently-persisted LineItem record from this one action.
+    {:ok, updated_order} = Ash.update(changeset)
+
+    real_line_items =
+      AshEx4pm.Test.LineItem
+      |> Ash.Query.filter(order_id: updated_order.id)
+      |> Ash.read!()
+
+    assert length(real_line_items) == 1
+
+    activity = %AshEx4pm.Activity{name: :order_created, on: :add_line_item, resource: Order}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :add_line_item},
+      data: updated_order,
+      changeset: changeset
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+    # Documented, deliberate scope (see AshEx4pm.Notifier moduledoc): even
+    # though this real action really did touch two separate resource
+    # records (the order and the newly-created line item), the emitted
+    # envelope carries exactly one object/relationship -- the order's own
+    # record_id. If this ever regresses to including the related
+    # line-item id without a corresponding design decision, this
+    # assertion catches it.
+    assert map_size(envelope["objects"]) == 1
+    assert Map.has_key?(envelope["objects"], to_string(updated_order.id))
+
+    [event] = envelope["events"]
+    assert [%{"objectId" => object_id, "qualifier" => "primary"}] = event["relationships"]
+    assert object_id == to_string(updated_order.id)
   end
 
   test "an action with no matching activity does not attempt to emit anything" do
