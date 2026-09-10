@@ -1,0 +1,24 @@
+{
+  "entries": {
+    "priv/ggen/templates/ferroplan.ex.eex=>lib/ash_ex4pm/ferroplan.ex": {
+      "out_template": "lib/ash_ex4pm/ferroplan.ex",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/lib/ash_ex4pm/ferroplan.ex": "sha256:045390263aaec902675f3b505e2e78db240919113c4b199d37ed033efa94abf7"
+      },
+      "pack_dir": null,
+      "template": "priv/ggen/templates/ferroplan.ex.eex",
+      "updated_at": "2026-09-10T17:27:17.556686Z"
+    },
+    "priv/ggen/templates/ferroplan.ex.eex=>tmp_proof/ferroplan_proof.ex": {
+      "out_template": "tmp_proof/ferroplan_proof.ex",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/tmp_proof/ferroplan_proof.ex": "sha256:10b3f59da7a5005b126f1d03fca7010b7ed4e98fd030d8d57952bc53dcd9375b"
+      },
+      "pack_dir": null,
+      "template": "priv/ggen/templates/ferroplan.ex.eex",
+      "updated_at": "2026-09-10T17:27:32.426954Z"
+    }
+  },
+  "schema_version": "1",
+  "version": 1
+}

@@ -1,0 +1,10 @@
+PREFIX ex4pmb: <https://chatman.ai/ex4pm/beam4pm-services#>
+SELECT ?operation ?jsonApiType ?actionName ?httpMethod ?planningType ?status WHERE {
+  ?s a ex4pmb:AdmittedBeam4pmService ;
+     ex4pmb:operation ?operation ;
+     ex4pmb:jsonApiType ?jsonApiType ;
+     ex4pmb:actionName ?actionName ;
+     ex4pmb:httpMethod ?httpMethod ;
+     ex4pmb:planningType ?planningType .
+  OPTIONAL { ?s ex4pmb:status ?status }
+} ORDER BY ?operation

@@ -1,0 +1,12 @@
+[
+  {
+    "name": "ferroplan",
+    "ontology": "{{ex4pm_ontology}}",
+    "query_bindings": {
+      "admitted": "priv/ggen/queries/admitted_ferroplan_activities.rq"
+    },
+    "template": "priv/ggen/templates/ferroplan.ex.eex",
+    "out": "lib/ash_ex4pm/ferroplan.ex",
+    "test_path": null
+  }
+]

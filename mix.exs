@@ -48,6 +48,15 @@ defmodule AshEx4pm.MixProject do
       # revisit and loosen this constraint.
       {:ex4pm, "== 26.9.9"},
       {:igniter, "~> 0.5", optional: true},
+      # ggen_igniter drives this repo's own admitted-ferroplan-capability
+      # generation unit (mix ash_ex4pm.ggen.sync) -- see
+      # priv/ggen/manifest.json. Not runtime: this repo ships no ontology
+      # of its own; it re-queries the ex4pm dependency's packaged
+      # priv/ontology/ex4pm.ttl (ex4pm's mix.exs declares `files: ["lib",
+      # "priv", "mix.exs"]`, so priv/ ships with the Hex package) rather
+      # than forking a second copy, avoiding the two-repo-drift problem
+      # ex4pm's own ex4pmb: prefix comment already flags for beam4pm/ex4pm.
+      {:ggen_igniter, "~> 26.9", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
