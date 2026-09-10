@@ -361,6 +361,55 @@ defmodule AshEx4pmTest do
     assert log =~ "could not resolve object_relationship"
   end
 
+  test "AshEx4pm.Notifier.load/2 returns the declared relationship name, and Ash's " <>
+         "own real pre-notify load pipeline actually resolves it" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    # Deliberately NOT loading :order anywhere in this test -- this is a
+    # plain create with no explicit `Ash.Query.load/2` or `Ash.load!/2`
+    # call. Confirms the real, documented default state: the relationship
+    # comes back unloaded from a plain create.
+    {:ok, line_item} =
+      LineItem
+      |> Ash.Changeset.for_create(:create, %{sku: "sku-load-2", order_id: order.id})
+      |> Ash.create()
+
+    assert %Ash.NotLoaded{} = line_item.order
+
+    action = Ash.Resource.Info.action(LineItem, :create)
+
+    # load/2 itself: real function, real compiled activity introspection,
+    # no notification struct involved.
+    assert AshEx4pm.Notifier.load(LineItem, action) == [:order]
+
+    # Ash's own real notifier-dependency pipeline: `notifier_calculation_query/3`
+    # builds the same query `Ash.Notifier.notify/1`'s internal
+    # `load_notification_data/2` builds from every registered notifier's
+    # `load/2`; `Ash.load/3` genuinely resolves it through the real
+    # `Ash.DataLayer.Ets` layer; `extract_notifier_data/4` is the same real,
+    # public function `notify/1`'s internal dispatch calls to read the
+    # per-notifier loaded result back off the record's calculations. This
+    # is the exact mechanism that makes the previously-disclosed "target
+    # not loaded" gap (see the "omits an unresolved object_relationship"
+    # test above, which still covers `build_envelope/2` in isolation with
+    # a deliberately unloaded struct) not apply to real end-to-end
+    # notifier dispatch anymore for a declared `object_relationship`.
+    query = Ash.Notifier.notifier_calculation_query(LineItem, action)
+    assert query
+
+    assert {:ok, loaded} = Ash.load(line_item, query, authorize?: false)
+
+    {_statements, notifier_data} =
+      Ash.Notifier.extract_notifier_data(loaded, [AshEx4pm.Notifier], LineItem, action)
+
+    assert {_statement, extra} = notifier_data[AshEx4pm.Notifier]
+    assert %AshEx4pm.Test.Order{id: loaded_order_id} = extra[:order]
+    assert loaded_order_id == order.id
+  end
+
   test "a compile-time typo'd object_relationship name is refused, not silently swallowed" do
     output =
       capture_io(:stderr, fn ->

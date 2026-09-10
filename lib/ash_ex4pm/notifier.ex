@@ -93,17 +93,23 @@ defmodule AshEx4pm.Notifier do
   facts for an activity via nested `object_relationship` entities (see
   `AshEx4pm.ObjectRelationship`) -- e.g.
   `object_relationship :customer, "placed_by"`
-  inside `activity :order_placed, on: :create do ... end`. Each declared
-  relationship is resolved from the notification's own *already-loaded*
-  target record (`Ash.Resource.Info.relationship/2` +
+  inside `activity :order_placed, on: :create do ... end`. This notifier
+  implements `Ash.Notifier.load/2` (Ash 3.x) to proactively request every
+  declared `object_relationship` name be loaded before `notify/1` fires --
+  Ash merges the result onto `notification.data` as part of the action's
+  own authorized pipeline, deduplicated against any other notifier's
+  identical load requests, so a declared relationship no longer needs to
+  already be selected/loaded by the triggering action itself. Each
+  resolved relationship is then read from the notification's target
+  record (`Ash.Resource.Info.relationship/2` +
   `Map.get(notification.data, relationship_name)`) and emitted into the
   envelope's real `"object_relationships"` key (`Ex4pm.OCEL`'s genuinely
   accepted `source_id`/`target_id`/`qualifier` shape -- confirmed against
-  `~/ex4pm/lib/ex4pm/ocel.ex`'s `normalize_object_relationships/1`). If
-  the target record was not loaded onto `notification.data` (e.g. the
-  action never selected/loaded that relationship), the fact is skipped
-  and logged rather than emitted with a fabricated or nil target id --
-  see `resolve_object_relationships/2`.
+  `~/ex4pm/lib/ex4pm/ocel.ex`'s `normalize_object_relationships/1`). The
+  only remaining case where a declared fact is skipped and logged rather
+  than emitted with a fabricated or nil target id is a load that itself
+  came back empty (e.g. the relationship genuinely has no related record) --
+  see `resolve_object_relationships/2` and `load/2`.
 
   This still does not recover unresolved `manage_relationship/3` input,
   and still does not attempt many-object events for actions that touch
@@ -116,6 +122,14 @@ defmodule AshEx4pm.Notifier do
   """
   use Ash.Notifier
   require Logger
+
+  # `Ash.Notifier.requires_original_data?/2` (Ash 3.0+) was evaluated and
+  # is deliberately NOT implemented here: this notifier only ever reads
+  # `notification.data` (the post-commit record) and
+  # `notification.changeset.attributes`/`.relationships` (the attempted
+  # changes) -- it never reads a pre-commit/original-record snapshot, so
+  # there is nothing for that callback to opt into. The `use Ash.Notifier`
+  # default (`false`) is correct as-is; not re-litigating this later.
 
   @impl Ash.Notifier
   def notify(%Ash.Notifier.Notification{} = notification) do
@@ -152,6 +166,33 @@ defmodule AshEx4pm.Notifier do
   end
 
   def notify(_), do: :ok
+
+  # Real `Ash.Notifier.load/2` implementation (Ash 3.x): requests exactly
+  # the activity's declared `object_relationship` relationship names be
+  # loaded before `notify/1` fires. Ash merges the result onto
+  # `notification.data` as part of the action's own authorized pipeline
+  # (`deps/ash/lib/ash/notifier/notifier.ex`'s `notifier_calculation_query/3`
+  # + `enrich_notification/3`) -- this is NOT the "fresh, unauthorized DB
+  # load inside a post-commit notifier" `resolve_object_relationship/3`'s
+  # own comment warns against; it is the framework's sanctioned mechanism
+  # for exactly this need, deduplicated against any other notifier's
+  # identical load requests. Closes the real, previously-disclosed gap
+  # where a declared O2O relationship not already selected/loaded by the
+  # triggering action was silently omitted from the emitted envelope
+  # (see `resolve_object_relationships/2`'s moduledoc reference). A
+  # relationship name outside this activity's declared set is left alone
+  # -- unchanged behavior for every existing activity that declares no
+  # `object_relationship` entities.
+  @impl Ash.Notifier
+  def load(resource, action) do
+    resource
+    |> AshEx4pm.Info.activities()
+    |> Enum.find(&(&1.on == action.name))
+    |> case do
+      nil -> []
+      activity -> Enum.map(activity.object_relationships, & &1.relationship)
+    end
+  end
 
   # Public (doc-hidden) so it is directly testable against a real
   # `Ex4pm.Refusal` produced by `Ex4pm.Stream.Ingest.ingest_envelope/1`,
@@ -499,14 +540,17 @@ defmodule AshEx4pm.Notifier do
   # `AshEx4pm.ObjectRelationship`) into the real, `Ex4pm.OCEL`-accepted
   # `"object_relationships"` shape (`source_id`/`target_id`/`qualifier`,
   # confirmed against `normalize_object_relationships/1` in
-  # `~/ex4pm/lib/ex4pm/ocel.ex`), using ONLY data already present on the
-  # notification -- never a fresh DB load, which would be a real,
-  # unauthorized side effect running inside a post-commit notifier.
+  # `~/ex4pm/lib/ex4pm/ocel.ex`). Reads ONLY data already present on the
+  # notification -- this function itself never performs a DB load; that
+  # would be a real, unauthorized side effect running inside a post-commit
+  # notifier. The data IS present here for every declared relationship in
+  # the normal case, though, because `load/2` (above) already requested it
+  # through Ash's own authorized pre-notify load pipeline.
   #
-  # A relationship whose target record isn't loaded onto
-  # `notification.data` (the action never selected/loaded it) is skipped
-  # and logged -- a real, disclosed gap, never a fabricated or nil target
-  # id silently emitted into the envelope.
+  # A relationship whose target record still isn't present on
+  # `notification.data` (e.g. the load genuinely resolved to nothing) is
+  # skipped and logged -- a real, disclosed edge case, never a fabricated
+  # or nil target id silently emitted into the envelope.
   @doc false
   def resolve_object_relationships(activity, notification, source_id) do
     activity.object_relationships

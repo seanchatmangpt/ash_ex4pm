@@ -26,6 +26,13 @@ defmodule AshEx4pm.Transformers.Persist do
      module): `after?/1` returns `true` unconditionally, so this
      transformer simply runs after everything else regardless of what
      future `transform/1` changes come to need.
+
+  Spark 2.6.0's transformer-persister ordering (`before`/`after` callbacks
+  for `Spark.Dsl.Transformer.persist/3` calls) was evaluated and found not
+  applicable here: this module is the only transformer `ash_ex4pm`
+  defines, so there is no second transformer to order a persist call
+  relative to; `after?/1` above already covers this module's own ordering
+  needs against every *other* extension's transformers.
   """
   use Spark.Dsl.Transformer
 
