@@ -7,13 +7,21 @@ defmodule AshEx4pm.Notifier do
   call `Ex4pmDomain.Notifier.OcelNotifier` makes, confirmed nonexistent,
   `~/ex4pm/docs/explanation/ash-ex4pm-prd-ard.md` BLOCKER 1).
 
-  Must be added explicitly to a resource's own `notifiers:` list (this
-  extension does not inject itself -- see `AshEx4pm`'s moduledoc and the
-  PRD's "global notifier injection" non-goal):
+  Registered automatically for any resource using `extensions: [AshEx4pm]` --
+  `AshEx4pm.Transformers.Persist.transform/1` persists this module into the
+  resource's `:simple_notifiers` key (the same persisted key
+  `use Ash.Resource, simple_notifiers: [...]` seeds,
+  `deps/ash/lib/ash/resource.ex:34,132`), which
+  `Ash.Resource.Info.notifiers/1` reads alongside the explicit `notifiers:`
+  list (`deps/ash/lib/ash/resource/info.ex:278-281`). No manual `notifiers:`
+  declaration is required:
 
       use Ash.Resource,
-        notifiers: [AshEx4pm.Notifier],
         extensions: [AshEx4pm]
+
+  A resource may still list `AshEx4pm.Notifier` explicitly in `notifiers:` --
+  the transformer de-duplicates against whatever is already persisted, so
+  doing so is harmless, just redundant.
 
   ## Envelope shape
 

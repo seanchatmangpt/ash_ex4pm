@@ -33,4 +33,40 @@ defmodule AshEx4pm.Transformers.PersistTest do
     assert Persist.after?(SomeUnrelatedRandomModule)
     assert Persist.after?(__MODULE__)
   end
+
+  describe "automatic simple_notifiers registration" do
+    # Real, no-mock proof (adversarial review finding, notifier.ex:10): a
+    # resource that declares `extensions: [AshEx4pm]` WITHOUT a manual
+    # `notifiers: [AshEx4pm.Notifier]` entry still has
+    # `AshEx4pm.Notifier` show up in the real
+    # `Ash.Resource.Info.notifiers/1` list, because `transform/1` now
+    # persists it into the same `:simple_notifiers` key
+    # `use Ash.Resource, simple_notifiers: [...]` seeds.
+
+    test "AshEx4pm.Notifier is present via Ash.Resource.Info.notifiers/1 with no manual notifiers: entry" do
+      assert AshEx4pm.Notifier in Ash.Resource.Info.notifiers(AshEx4pm.Test.Gadget)
+    end
+
+    test "a manually-declared notifiers: [AshEx4pm.Notifier] resource is not duplicated" do
+      notifiers = Ash.Resource.Info.notifiers(AshEx4pm.Test.Order)
+
+      assert Enum.count(notifiers, &(&1 == AshEx4pm.Notifier)) == 1
+    end
+
+    test "a real create action on the auto-registered resource fires the notifier and reaches ex4pm's real Evidence.Store" do
+      {:ok, gadget} =
+        AshEx4pm.Test.Gadget
+        |> Ash.Changeset.for_create(:create, %{sku: "gadget-sku-1"})
+        |> Ash.create()
+
+      assert gadget.sku == "gadget-sku-1"
+
+      entries = Ex4pm.Evidence.Store.all(Ex4pm.Evidence.Store)
+
+      assert Enum.any?(entries, fn r ->
+               match?(%{operation: {:ingest, :batch}}, r) and
+                 Map.get(r.metadata || %{}, :agent_id) == "ash_ex4pm"
+             end)
+    end
+  end
 end
