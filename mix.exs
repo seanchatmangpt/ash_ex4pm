@@ -38,7 +38,15 @@ defmodule AshEx4pm.MixProject do
       # tagged, checksum-verifiable release exists, per this repo's own
       # PRD (~/ex4pm/docs/explanation/ash-ex4pm-prd-ard.md) and the goal
       # of being a real, independently hex-publishable package.
-      {:ex4pm, "~> 26.9"},
+      #
+      # Exact-pinned (== 26.9.9), not "~> 26.9", as of 2026-09-09: ex4pm
+      # has no CHANGELOG.md or stated versioning policy for its third
+      # CalVer component (checked ../ex4pm/CHANGELOG.md directly -- it
+      # does not exist yet), so "~> 26.9" cannot actually guarantee the
+      # compatibility a SemVer `~>` pin implies. Exact-pin until ex4pm
+      # publishes a real versioning policy for that component; then
+      # revisit and loosen this constraint.
+      {:ex4pm, "== 26.9.9"},
       {:igniter, "~> 0.5", optional: true},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]

@@ -17,6 +17,12 @@ def deps do
 end
 ```
 
+`ash_ex4pm` itself pins `ex4pm` exactly (`{:ex4pm, "== 26.9.9"}`, see this repo's own
+`mix.exs`), not with a `~>` range: `ex4pm` has no `CHANGELOG.md` or stated versioning
+policy for its third CalVer component as of this writing, so a `~>` range cannot
+actually guarantee the compatibility it implies for a real SemVer package. This will
+be loosened once `ex4pm` publishes a real versioning policy for that component.
+
 `ash_ex4pm` itself depends on `ex4pm`. In this repo's own development, that dependency
 is a real path dependency (see this repo's own `mix.exs`):
 
@@ -132,11 +138,48 @@ honestly as a real, unresolved gap rather than claimed as full DO-authority cove
 
 ## Status
 
-Real, working code: 7/7 tests passing (`mix test`), no mocks — real `Ash.DataLayer.Ets`
+Real, working code: 25/25 tests passing (`mix test`), no mocks — real `Ash.DataLayer.Ets`
 resources, real `AshEx4pm.Notifier` firing, real calls into `ex4pm`'s running
-`Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. This is a fresh v26.9.9 initial
-release, not a mature package — treat the DSL shape as stable for the cases the test
-suite covers, and everything else as unverified until exercised.
+`Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. This release includes 10 real hardening
+fixes from an adversarial Ash-maintainer-style review, all covered by the real tests
+above (not asserted, exercised):
+
+- `AshEx4pm.Verifiers.Verify` refuses (`Spark.Error.DslError`) a domain-level
+  `activity`'s `resource:` that is not a compiled Ash resource, in addition to its
+  existing action-existence check.
+- `AshEx4pm.Notifier.record_id/2` resolves a resource's real Ash primary key (not a
+  hardcoded `:id` assumption) — correctly reads a non-`:id`-named primary key (e.g.
+  `:sku`), falls back to a clearly-synthetic id (`"synthetic_obj_" <> _`) for a `nil`
+  or unresolvable value, and still handles a plain map's `:id` key for hand-built
+  generic-action notifications.
+- `AshEx4pm.Changes.BrceGate` validates `actor.capabilities` and refuses cleanly
+  (`{:error, %Ash.Error.Invalid{}}`, no raise) when it is a malformed non-list
+  (a bare string, map, integer, or tuple), instead of crashing on `Enum.member?`.
+- The `:activity` Spark DSL entity carries a real entity-level `describe:` for Spark
+  doc generation.
+- `AshEx4pm.Activity`'s `@enforce_keys [:name, :on]` and its Spark schema's `on:`
+  requiredness now agree — `on:` is genuinely required, refused at compile time
+  (`Spark.Error.DslError`) rather than silently defaulting to `nil`.
+- `AshEx4pm.Transformers.Persist`'s ordering-after-Ash's-core-transformers rationale
+  is corrected and documented against the transformers Ash actually runs.
+- A refused `Ex4pm.Stream.Ingest.ingest_envelope/1` call is now logged
+  (`AshEx4pm.Notifier.log_refusal/3`), not silently swallowed.
+- `AshEx4pm.Changes.BrceGate`'s `before_action` hook uses `prepend?: true`, so the
+  gate always runs before any other `before_action` change on the same resource
+  regardless of declaration order — a refused gate declared *after* another change in
+  the `changes:` list still halts before that other change's side effect runs (real
+  regression test using a real `Agent`-backed side-effect counter, not an interaction
+  assertion).
+- Each admitted/outcome receipt's `subject_hash` is now computed per-record (not just
+  per resource+operation), so two concurrent creates of the same resource+operation
+  with different data get distinguishable subject hashes in `Ex4pm.Evidence.Store`.
+- The single-object-per-envelope scope (a `manage_relationship`-managed related
+  record is never included in the emitted OCEL envelope, only the action's primary
+  object) is documented in the notifier's own moduledoc and covered by a dedicated
+  regression test.
+
+Treat the DSL shape as stable for the cases the test suite covers, and everything
+else as unverified until exercised.
 
 Explicit non-goals, named in the PRD this implements
 (`~/ex4pm/docs/explanation/ash-ex4pm-prd-ard.md`) and not yet supported:

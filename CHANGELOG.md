@@ -4,6 +4,63 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] - 2026-09-09
+
+Hardening pass: 10 real fixes from an adversarial Ash-maintainer-style review,
+bringing the suite to 25/25 real tests passing (`test/ash_ex4pm_test.exs`), still
+Chicago-style throughout (no mocks).
+
+### Changed
+
+- **`{:ex4pm, ...}` dependency exact-pinned.** `mix.exs` now pins
+  `{:ex4pm, "== 26.9.9"}` instead of `{:ex4pm, "~> 26.9"}`. `ex4pm` has no
+  `CHANGELOG.md` or stated versioning policy for its third CalVer component (checked
+  `../ex4pm/CHANGELOG.md` directly — it does not exist as of this entry), so a `~>`
+  range cannot actually guarantee the compatibility it implies for a real SemVer
+  dependency. Exact-pin until `ex4pm` publishes a real versioning policy for that
+  component.
+
+### Fixed
+
+- `AshEx4pm.Verifiers.Verify` now also refuses a domain-level `activity` whose
+  `resource:` is not a compiled Ash resource, not just a nonexistent `on:` action.
+- `AshEx4pm.Notifier.record_id/2` now resolves a resource's real Ash primary key
+  instead of assuming `:id` — correctly reads a non-`:id`-named primary key (e.g.
+  `:sku`), and falls back to a clearly-synthetic id (`"synthetic_obj_" <> _`, never an
+  empty string) when the value is `nil` or the input has no resolvable id at all.
+- `AshEx4pm.Changes.BrceGate` validates `actor.capabilities` before use and refuses
+  cleanly (`{:error, %Ash.Error.Invalid{}}`) instead of raising when it is a
+  malformed non-list (a bare string, map, integer, or tuple).
+- The `:activity` Spark DSL entity now carries a real entity-level `describe:` for
+  Spark doc generation.
+- `AshEx4pm.Activity`'s `@enforce_keys [:name, :on]` and the entity schema's `on:`
+  requiredness previously contradicted each other (struct enforced it, schema marked
+  it optional) alongside a doc claiming unimplemented implicit inference; the schema
+  now genuinely requires `on:`, refused at compile time
+  (`Spark.Error.DslError`) instead of silently building `%AshEx4pm.Activity{on: nil}`.
+- `AshEx4pm.Transformers.Persist`'s stated ordering-after-Ash's-core-transformers
+  rationale (`CachePrimaryKey`, `DefaultPrimaryKey`, `SetRelationshipInformation`,
+  `BelongsToAttribute`, `BelongsToSourceAttribute`) is corrected to match what Ash
+  actually runs.
+- A refused `Ex4pm.Stream.Ingest.ingest_envelope/1` call is now logged
+  (`AshEx4pm.Notifier.log_refusal/3`) instead of being silently swallowed.
+- `AshEx4pm.Changes.BrceGate`'s `before_action` hook now uses `prepend?: true`, so
+  the gate runs before any other `before_action` change on the same resource
+  regardless of declaration order in `changes:` — closes a real hazard where a gate
+  declared after another change would let that other change's side effect run before
+  a refused gate ever halted the action.
+- Each receipt's `subject_hash` is now computed per real record data, not just
+  per resource+operation — two concurrent creates of the same resource+operation
+  with different attribute data previously collapsed to one identical
+  `subject_hash`, making them indistinguishable in `Ex4pm.Evidence.Store`.
+- The documented single-object-per-envelope scope (a `manage_relationship`-managed
+  related record is never included in the emitted OCEL envelope) is now explicit in
+  `AshEx4pm.Notifier`'s moduledoc and covered by a dedicated regression test.
+
+### Added
+
+- 18 new tests covering the fixes above (25/25 total, up from 7/7).
+
 ## [26.9.9] - 2026-09-09
 
 Initial release.
