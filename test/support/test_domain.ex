@@ -105,6 +105,39 @@ defmodule AshEx4pm.Test.Invoice do
   end
 end
 
+defmodule AshEx4pm.Test.Gadget do
+  @moduledoc """
+  Real Ash resource that declares `extensions: [AshEx4pm]` WITHOUT a manual
+  `notifiers: [AshEx4pm.Notifier]` entry -- proves
+  `AshEx4pm.Transformers.Persist.transform/1` registers the notifier
+  automatically via the real `:simple_notifiers` persisted key
+  (`Ash.Resource.Info.notifiers/1`, `deps/ash/lib/ash/resource/info.ex:278-281`),
+  not just that a manually-declared notifier still fires.
+  """
+  use Ash.Resource,
+    domain: AshEx4pm.Test.Domain,
+    data_layer: Ash.DataLayer.Ets,
+    extensions: [AshEx4pm]
+
+  ex4pm do
+    activity(:gadget_created, on: :create)
+  end
+
+  actions do
+    defaults([:read, :destroy])
+
+    create :create do
+      primary?(true)
+      accept([:sku])
+    end
+  end
+
+  attributes do
+    uuid_primary_key(:id)
+    attribute(:sku, :string, public?: true)
+  end
+end
+
 defmodule AshEx4pm.Test.LineItem do
   @moduledoc "Real related Ash resource -- appended via manage_relationship on Order."
   use Ash.Resource,
@@ -138,6 +171,7 @@ defmodule AshEx4pm.Test.Domain do
     resource(AshEx4pm.Test.Order)
     resource(AshEx4pm.Test.Widget)
     resource(AshEx4pm.Test.Invoice)
+    resource(AshEx4pm.Test.Gadget)
     resource(AshEx4pm.Test.LineItem)
   end
 end
