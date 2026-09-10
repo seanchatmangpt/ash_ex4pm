@@ -136,10 +136,62 @@ defmodule AshEx4pm.Notifier do
           "id" => "ev_#{System.unique_integer([:positive])}",
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}]
+          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}],
+          "attributes" => event_attributes(notification)
         }
       ]
     }
+  end
+
+  # OCEL 2.0's defining feature is object attribute VALUES OVER TIME, not
+  # just a static id+type per object -- ex4pm's real
+  # `Ex4pm.OCEL2.attribute_history/3` already walks an object's event
+  # trace and reconstructs that history from each event's real
+  # `attributes` map (`Ex4pm.OCEL.normalize_event/2`,
+  # `~/ex4pm/lib/ex4pm/ocel.ex` ~line 225, already extracts a top-level
+  # "attributes" sub-key on every event via `drop_known_event_keys/1` --
+  # confirmed by reading that function). Populating this key is the only
+  # ash_ex4pm-side change needed to close the gap: no change to ex4pm
+  # itself is required, because the reconstruction's event-scoped lookup
+  # branch (`Ex4pm.OCEL2`'s private `event_attribute_value/3`,
+  # `from_event_attrs = Map.get(event.attributes, attribute_name)`)
+  # already reads exactly this key.
+  #
+  # Scope: only `:update` actions carry a real before/after attribute
+  # change worth recording as history -- a `:create` action has no prior
+  # value to distinguish from (the object doesn't exist yet), so its
+  # event intentionally carries an empty attributes map rather than a
+  # synthetic "changed from nil" entry.
+  #
+  # `notification.changeset` is a real `%Ash.Changeset{}` (not a
+  # synthetic wrapper): its `attributes` field is Ash's own map of
+  # attribute_name (atom) => the real new value actually being
+  # persisted for this update, already cast/validated by the time
+  # notifiers fire (post-commit). Only public attributes are surfaced --
+  # a private/internal attribute leaking into an external OCEL envelope
+  # would be a real information-disclosure regression, not a feature.
+  defp event_attributes(%Ash.Notifier.Notification{action: %{type: :update}} = notification) do
+    changeset = notification.changeset
+
+    if is_struct(changeset, Ash.Changeset) do
+      public_attribute_names = public_attribute_names(notification.resource)
+
+      changeset.attributes
+      |> Enum.filter(fn {name, _value} -> MapSet.member?(public_attribute_names, name) end)
+      |> Map.new(fn {name, value} -> {to_string(name), value} end)
+    else
+      %{}
+    end
+  end
+
+  defp event_attributes(_notification), do: %{}
+
+  defp public_attribute_names(resource) do
+    resource
+    |> Ash.Resource.Info.public_attributes()
+    |> MapSet.new(& &1.name)
+  rescue
+    _ -> MapSet.new()
   end
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
