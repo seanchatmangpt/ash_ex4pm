@@ -35,30 +35,57 @@ defmodule AshEx4pm.Notifier do
   DIFFERENT real path (batch/offline normalization for
   discover/conform), not what the real-time ingest function consumes.
 
-  ## Scope: single-object events only
+  ## Scope: what this notifier can and cannot see
 
-  `build_envelope/2` always emits exactly one OCEL object -- the acting
-  resource's own `record_id` -- and one relationship entry
-  (`qualifier: "primary"` pointing at that same id). This is deliberate,
-  not an oversight: a single `Ash.Notifier.Notification` here corresponds
-  to a single resource/changeset, and `notify/1` has no reliable way to
-  recover the *actual persisted* identities of records touched via
-  `Ash.Changeset.manage_relationship/3` from that one notification alone
-  (`changeset.relationships` holds the raw pre-commit input passed to
-  `manage_relationship`, not resolved post-commit related-record ids, and
-  a single Ash action with `manage_relationship` can already produce
-  several independent `resource_notifications` -- one per affected
-  resource -- rather than one combined notification carrying the full
-  relationship set).
+  There are two genuinely distinct limitations here, not one -- they
+  used to be bundled under a single "single-object events only" claim,
+  which overstated the second one.
 
-  If an activity is genuinely relational (e.g. an order-to-line-item
-  append that should be modeled as one multi-object OCEL event), this
-  notifier is the wrong mechanism for it. Instead, add a resource-level
+  1. **Permanent: no cross-resource/cross-notification correlation.**
+     `Ash.Notifier.notify/1`'s callback signature really is
+     one-notification-at-a-time, with no accumulator parameter and no
+     visibility into sibling `resource_notifications` fired by the same
+     top-level action for a *different* resource (e.g. an action that
+     itself calls `Ash.create/1` on another resource, or a
+     `manage_relationship` whose related resource has its own
+     `notifiers:` list and therefore gets its own independent
+     notification). A single `Ash.Notifier.Notification` here
+     corresponds to exactly one resource/changeset/action firing, and
+     `notify/1` cannot reach across to correlate it with any other
+     notification from the same transaction. This is a real,
+     permanent constraint of the callback shape, not something
+     `build_envelope/2` can work around.
+
+  2. **Fixed below, was not actually blocked: relationships resolved by
+     `manage_relationship` ON THE PRIMARY CHANGESET.** `build_envelope/2`
+     now walks every relationship name present as a key in
+     `notification.changeset.relationships` (used only to know *which*
+     relationships this action's `manage_relationship` calls touched --
+     never for its raw pre-commit values) and reads the real, resolved,
+     post-commit related record(s) directly off `notification.data`.
+     This works because Ash's own `manage_relationships/4`
+     (`deps/ash/lib/ash/actions/managed_relationships.ex:710`) does
+     `Map.put(record, relationship.name, new_value)` with the actually
+     persisted related struct(s) before that record ever becomes
+     `notification.data` (`deps/ash/lib/ash/actions/helpers.ex:435`'s
+     `notify/3` calls `resource_notification/3` with that same
+     post-managed-relationships record, and `resource_notification/3`
+     sets `data: result` directly from it) -- so the data was already
+     there on the one notification this callback receives; it was
+     simply never read. A relationship name whose resolved value comes
+     back `%Ash.NotLoaded{}` (not actually set on this particular
+     record) is skipped rather than emitted as an incomplete object.
+
+  If an activity's real cross-resource correlation need is limitation 1
+  above (a sibling resource's own independent notification, not a
+  `manage_relationship` on THIS action's own changeset), this notifier
+  is still the wrong mechanism for it. Add a resource-level
   `Ash.Resource.Change` that builds and returns a manual
   `%Ash.Notifier.Notification{}` carrying the full object/relationship
   set for that action (see `action_input.ex`'s manual-notification
-  pattern) rather than relying on this notifier's one-object-per-action
-  default.
+  pattern) -- and note that such a change must itself read the resolved
+  data the same way `build_envelope/2` does below (from the post-action
+  record's relationship keys), not from a source that doesn't exist.
   """
   use Ash.Notifier
   require Logger
@@ -114,10 +141,11 @@ defmodule AshEx4pm.Notifier do
   end
 
   # Public (but @doc false) so tests can inspect the real envelope shape
-  # directly -- deliberately single-object/single-relationship, see the
-  # moduledoc's "Scope: single-object events only" section for why this
-  # notifier does not attempt to recover related-record identities from
-  # `manage_relationship` calls on the same changeset.
+  # directly. Emits the primary object/relationship always, plus one
+  # object/relationship pair per real, resolved related record reachable
+  # from `manage_relationship` calls on THIS action's own changeset --
+  # see the moduledoc's "Scope" section for exactly which relationships
+  # that is (and, just as importantly, which it permanently is not).
   @doc false
   def build_envelope(activity, notification) do
     provenance_source =
@@ -125,6 +153,19 @@ defmodule AshEx4pm.Notifier do
 
     record_id = record_id(notification.resource, notification.data)
     timestamp = DateTime.utc_now()
+
+    primary_object = object_map(activity, notification.resource, record_id, notification.data)
+
+    primary_relationship = %{
+      "objectId" => record_id,
+      "qualifier" => to_string(activity.qualifier || "primary")
+    }
+
+    {related_objects, related_relationships} = managed_relationship_objects(notification)
+
+    objects =
+      [primary_object | related_objects]
+      |> Map.new(&{&1["id"], &1})
 
     %{
       "schema" => "ash_ex4pm/1",
@@ -145,18 +186,14 @@ defmodule AshEx4pm.Notifier do
       # collision surface than a counter that is guaranteed to start over
       # at 1 on every boot.
       "sequence" => System.os_time(:nanosecond),
-      "objects" => %{
-        record_id => object_map(activity, notification.resource, record_id, notification.data)
-      },
+      "objects" => objects,
       "events" => [
         %{
           "id" => event_id(notification.resource, activity, record_id, timestamp),
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.to_iso8601(timestamp),
-          "relationships" => [
-            %{"objectId" => record_id, "qualifier" => to_string(activity.qualifier || "primary")}
-          ],
-          "attributes" => event_attributes(activity, notification.data)
+          "relationships" => [primary_relationship | related_relationships],
+          "attributes" => event_attributes(activity, notification)
         }
       ]
     }
@@ -227,18 +264,43 @@ defmodule AshEx4pm.Notifier do
 
   defp declared_attributes(_object_type, _data), do: %{}
 
-  # Populates the emitted event's real OCEL "attributes" map from the
-  # activity's compiled `attributes: [name: type, ...]` schema
-  # (AshEx4pm.Transformers.Persist already refused any unsupported type at
-  # compile time -- see @allowed_attribute_types there) and the
-  # notification's own post-commit data, coercing each present value to
-  # its declared type. A declared attribute whose value is nil or absent
-  # from `data`, or whose real value fails coercion to its declared type,
-  # is left out of the emitted map (never silently emitted as a wrong-typed
-  # or fabricated value) and logged so the gap is visible rather than
-  # silently swallowed.
+  # Populates the emitted event's real OCEL "attributes" map. Composes two
+  # mechanisms:
+  #
+  #   1. `declared_event_attributes/2` -- the activity's compiled
+  #      `attributes: [name: type, ...]` schema (AshEx4pm.Transformers.Persist
+  #      already refused any unsupported type at compile time -- see
+  #      @allowed_attribute_types there), coercing each present value to its
+  #      declared type. A declared attribute whose value is nil or absent from
+  #      `data`, or whose real value fails coercion to its declared type, is
+  #      left out (never silently emitted as a wrong-typed or fabricated
+  #      value) and logged so the gap is visible rather than silently
+  #      swallowed. This is the only DEFAULT/primary mechanism -- unchanged
+  #      behavior for every existing activity.
+  #
+  #   2. `attribute_change_attributes/2` -- opt-in (`track_attribute_changes?:
+  #      true`), `:update`-only, public-attributes-only automatic capture of
+  #      whatever raw attribute changes landed on `notification.changeset`
+  #      that the activity author did NOT explicitly declare. This closes the
+  #      OCEL 2.0 attribute value-time-log gap for undeclared attributes
+  #      without leaking private/internal fields.
+  #
+  # `declared` wins on key collision -- the typed/coerced/public-checked path
+  # always takes precedence over the raw automatic-diff path, so merge order
+  # is the single source of truth for precedence and no separate
+  # declared-name exclusion bookkeeping is needed in
+  # `attribute_change_attributes/2`.
   @doc false
-  def event_attributes(%{attributes: attributes}, data) when is_list(attributes) do
+  def event_attributes(%{attributes: attributes} = activity, %Ash.Notifier.Notification{} = notification)
+      when is_list(attributes) do
+    declared = declared_event_attributes(attributes, notification.data)
+    history = attribute_change_attributes(activity, notification)
+    Map.merge(history, declared)
+  end
+
+  def event_attributes(_activity, _notification), do: %{}
+
+  defp declared_event_attributes(attributes, data) do
     attributes
     |> Enum.reduce(%{}, fn {name, type}, acc ->
       case fetch_field(data, name) do
@@ -262,7 +324,84 @@ defmodule AshEx4pm.Notifier do
     end)
   end
 
-  def event_attributes(_activity, _data), do: %{}
+  # Opt-in (`track_attribute_changes?: true`), `:update`-only, public-only
+  # automatic capture of raw attribute changes off `notification.changeset`.
+  # A `:create` has no prior value to log a change against, so this never
+  # fires there. Filters to `Ash.Resource.Info.public_attributes/1` --
+  # a real security floor, never optional -- so private/internal attributes
+  # never leak into the emitted OCEL envelope.
+  defp attribute_change_attributes(%{track_attribute_changes?: true}, %Ash.Notifier.Notification{
+         action: %{type: :update},
+         changeset: %Ash.Changeset{attributes: changed},
+         resource: resource
+       })
+       when is_map(changed) do
+    public_names = public_attribute_names(resource)
+
+    changed
+    |> Enum.filter(fn {name, _value} -> MapSet.member?(public_names, name) end)
+    |> Map.new(fn {name, value} -> {to_string(name), value} end)
+  end
+
+  defp attribute_change_attributes(_activity, _notification), do: %{}
+
+  defp public_attribute_names(resource) do
+    resource |> Ash.Resource.Info.public_attributes() |> MapSet.new(& &1.name)
+  rescue
+    _ -> MapSet.new()
+  end
+
+  # Walks relationship names that were actually touched by
+  # `manage_relationship` on THIS notification's own changeset --
+  # `changeset.relationships`'s keys are used only to know *which*
+  # relationships were involved, never for that map's raw pre-commit
+  # values -- and reads the real, resolved, post-commit related
+  # record(s) off `notification.data` (the same record Ash's own
+  # `Ash.Actions.ManagedRelationships.manage_relationships/4` already
+  # attached them to via `Map.put(record, relationship.name,
+  # new_value)` before it became `notification.data`; see the
+  # moduledoc's "Scope" section for the exact source references). A
+  # relationship whose value on this record is `%Ash.NotLoaded{}` (not
+  # actually resolved here) is skipped, never emitted as an incomplete
+  # object.
+  @doc false
+  def managed_relationship_objects(%{changeset: %{relationships: relationships}} = notification)
+      when is_map(relationships) do
+    resource = notification.resource
+    data = notification.data
+
+    relationships
+    |> Map.keys()
+    |> Enum.reduce({[], []}, fn rel_name, {objects_acc, rels_acc} ->
+      case related_records(resource, data, rel_name) do
+        {:ok, destination, records} ->
+          qualifier = to_string(rel_name)
+
+          Enum.reduce(records, {objects_acc, rels_acc}, fn record, {o, r} ->
+            related_id = record_id(destination, record)
+            object = %{"id" => related_id, "type" => resource_type_name(destination)}
+            relationship = %{"objectId" => related_id, "qualifier" => qualifier}
+            {[object | o], [relationship | r]}
+          end)
+
+        :error ->
+          {objects_acc, rels_acc}
+      end
+    end)
+  end
+
+  def managed_relationship_objects(_notification), do: {[], []}
+
+  defp related_records(resource, data, rel_name) do
+    with %{destination: destination} <- Ash.Resource.Info.relationship(resource, rel_name),
+         true <- is_struct(data),
+         value <- Map.get(data, rel_name),
+         false <- is_struct(value, Ash.NotLoaded) do
+      {:ok, destination, List.wrap(value)}
+    else
+      _ -> :error
+    end
+  end
 
   # Deterministic, globally-unique, restart-stable event id: a SHA-256
   # digest of (resource module, activity name, resolved record id,

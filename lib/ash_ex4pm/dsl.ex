@@ -33,6 +33,7 @@ defmodule AshEx4pm.Activity do
     :object_type,
     attributes: [],
     qualifier: "primary",
+    track_attribute_changes?: false,
     __identifier__: nil,
     __spark_metadata__: nil
   ]
@@ -44,7 +45,8 @@ defmodule AshEx4pm.Activity do
           resource: module() | nil,
           object_type: atom() | nil,
           attributes: [{atom(), attribute_type()}],
-          qualifier: String.t() | atom()
+          qualifier: String.t() | atom(),
+          track_attribute_changes?: boolean()
         }
 end
 
@@ -153,6 +155,22 @@ defmodule AshEx4pm.Dsl do
             "one qualifier per activity -- see this notifier's own moduledoc " <>
             "\"Scope: single-object events only\" section for the multi-relationship " <>
             "escape hatch."
+      ],
+      track_attribute_changes?: [
+        type: :boolean,
+        required: false,
+        default: false,
+        doc:
+          "Opt-in, composed on top of `attributes:` (never a replacement for it): " <>
+            "when true and this activity's `on:` action is `:update`, " <>
+            "AshEx4pm.Notifier.build_envelope/2 additionally captures every raw, " <>
+            "PUBLIC (Ash.Resource.Info.public_attributes/1) attribute change present " <>
+            "on the notification's changeset that this activity's own `attributes:` " <>
+            "schema did NOT already declare, string-keyed, into the same emitted " <>
+            "event \"attributes\" map. Declared/typed attributes always win on key " <>
+            "collision. No effect on `:create` actions (no prior value exists to " <>
+            "diff against) or when false (the default -- zero behavior change for " <>
+            "existing activities)."
       ]
     ]
   }
