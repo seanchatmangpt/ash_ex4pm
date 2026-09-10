@@ -29,6 +29,8 @@ defmodule AshEx4pm.Notifier do
   """
   use Ash.Notifier
 
+  require Logger
+
   @impl Ash.Notifier
   def notify(%Ash.Notifier.Notification{} = notification) do
     resource = notification.resource
@@ -54,13 +56,30 @@ defmodule AshEx4pm.Notifier do
           # this is fire-and-forget, matching Ex4pmDomain.Notifier.OcelNotifier's
           # own real semantics (also post-commit, also non-blocking) --
           # a real BRCE-gated PRE-commit path is AshEx4pm.Changes.BrceGate,
-          # a separate, deliberate mechanism (see its own moduledoc).
-          {:error, _refusal} -> :ok
+          # a separate, deliberate mechanism (see its own moduledoc). The
+          # refusal itself is never silently discarded, though: it can be
+          # caused by a bug in build_envelope/2's own output (not just a
+          # transient downstream condition), so it is always logged.
+          {:error, refusal} -> log_refusal(refusal, resource, action_name)
         end
     end
   end
 
   def notify(_), do: :ok
+
+  # Public (doc-hidden) so it is directly testable against a real
+  # `Ex4pm.Refusal` produced by `Ex4pm.Stream.Ingest.ingest_envelope/1`,
+  # without mocking either ex4pm or Logger.
+  @doc false
+  def log_refusal(refusal, resource, action_name) do
+    Logger.warning(
+      "AshEx4pm.Notifier: ingest_envelope refused: #{inspect(refusal)}",
+      resource: resource,
+      action: action_name
+    )
+
+    :ok
+  end
 
   defp build_envelope(activity, notification) do
     provenance_source =
