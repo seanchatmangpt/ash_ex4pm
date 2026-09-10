@@ -16,6 +16,10 @@ defmodule AshEx4pm.Verifiers.Verify do
      parse time for a single section, but this re-checks explicitly in
      case entities were merged from multiple `ex4pm do ... end` blocks
      across a resource and its domain).
+  3. Every `object_relationship`'s `relationship:` must actually exist on
+     the target resource -- the same fail-closed discipline as (1),
+     applied to O2O declarations so a typo'd relationship name is a
+     compile error, never a silent no-op at emit time.
   """
   use Spark.Dsl.Verifier
 
@@ -35,7 +39,8 @@ defmodule AshEx4pm.Verifiers.Verify do
          )}
 
       %{activities: activities} ->
-        with :ok <- check_actions_exist(activities, module, dsl_state) do
+        with :ok <- check_actions_exist(activities, module, dsl_state),
+             :ok <- check_relationships_exist(activities, module, dsl_state) do
           check_no_duplicate_names(activities, module)
         end
     end
@@ -90,6 +95,52 @@ defmodule AshEx4pm.Verifiers.Verify do
              "does not exist on #{inspect(resource)}. Real action names: #{inspect(action_names)}."
        )}
     end
+  end
+
+  defp check_relationships_exist(activities, module, dsl_state) do
+    Enum.find_value(activities, :ok, fn a ->
+      resource = a.resource || module
+
+      relationship_names =
+        cond do
+          resource == module ->
+            # Self-reference: the module is still mid-compile, so read the
+            # `relationships` section directly out of `dsl_state`, the same
+            # verifier-safe pattern `check_actions_exist/3` uses for `:actions`.
+            dsl_state
+            |> Verifier.get_entities([:relationships])
+            |> Enum.map(& &1.name)
+
+          Code.ensure_loaded?(resource) and function_exported?(resource, :spark_dsl_config, 0) ->
+            resource |> Ash.Resource.Info.relationships() |> Enum.map(& &1.name)
+
+          true ->
+            nil
+        end
+
+      cond do
+        relationship_names == nil ->
+          # An unloaded/non-resource `resource:` is already reported by
+          # check_actions_exist/3 above (verify/1 runs it first); avoid a
+          # second, redundant error for the same root cause here.
+          :ok
+
+        true ->
+          Enum.find_value(a.object_relationships, :ok, fn rel ->
+            if rel.relationship not in relationship_names do
+              {:error,
+               Spark.Error.DslError.exception(
+                 module: module,
+                 path: [:ex4pm, a.name, :object_relationship, rel.relationship],
+                 message:
+                   "`object_relationship relationship: #{inspect(rel.relationship)}` references " <>
+                     "a relationship that does not exist on #{inspect(resource)}. Real " <>
+                     "relationship names: #{inspect(relationship_names)}."
+               )}
+            end
+          end)
+      end
+    end)
   end
 
   defp check_no_duplicate_names(activities, module) do

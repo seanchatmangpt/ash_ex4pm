@@ -1,6 +1,7 @@
 defmodule AshEx4pmTest do
   use ExUnit.Case, async: false
   require Ash.Query
+  import ExUnit.CaptureIO
 
   # Real, no-mock tests: a real Ash resource (Ash.DataLayer.Ets), a real
   # create action, real AshEx4pm.Notifier firing, a real
@@ -258,6 +259,142 @@ defmodule AshEx4pmTest do
     end
   end
 
+  alias AshEx4pm.Test.LineItem
+
+  test "declared object_relationship entities are compiled onto the activity" do
+    assert [%AshEx4pm.Activity{name: :line_item_added, on: :create} = activity] =
+             AshEx4pm.Info.activities(LineItem)
+
+    assert [%AshEx4pm.ObjectRelationship{relationship: :order, qualifier: "placed_in"}] =
+             activity.object_relationships
+  end
+
+  test "build_envelope/2 emits a real, ex4pm-accepted O2O fact when the relationship is loaded" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    {:ok, line_item} =
+      LineItem
+      |> Ash.Changeset.for_create(:create, %{sku: "sku-1", order_id: order.id})
+      |> Ash.create()
+
+    # Real load through the real Ash.DataLayer.Ets layer -- not a fixture
+    # or a hand-built struct standing in for one.
+    loaded_line_item = Ash.load!(line_item, :order)
+
+    activity = %AshEx4pm.Activity{
+      name: :line_item_added,
+      on: :create,
+      resource: LineItem,
+      object_relationships: [
+        %AshEx4pm.ObjectRelationship{relationship: :order, qualifier: "placed_in"}
+      ]
+    }
+
+    notification = %Ash.Notifier.Notification{
+      resource: LineItem,
+      action: %{name: :create},
+      data: loaded_line_item
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+    assert envelope["object_relationships"] == [
+             %{
+               "source_id" => to_string(line_item.id),
+               "target_id" => to_string(order.id),
+               "qualifier" => "placed_in"
+             }
+           ]
+
+    # Confirm the real downstream validator (Ex4pm.OCEL) genuinely accepts
+    # this envelope shape end to end -- not just self-consistency inside
+    # ash_ex4pm.
+    assert {:ok, validated} = Ex4pm.OCEL.validate_envelope(envelope)
+    assert {:ok, log} = Ex4pm.OCEL.normalize(validated)
+
+    assert log.object_relationships == [
+             %{
+               source_id: to_string(line_item.id),
+               target_id: to_string(order.id),
+               qualifier: "placed_in"
+             }
+           ]
+  end
+
+  test "build_envelope/2 omits an unresolved object_relationship instead of fabricating a target id" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    {:ok, line_item} =
+      LineItem
+      |> Ash.Changeset.for_create(:create, %{sku: "sku-1", order_id: order.id})
+      |> Ash.create()
+
+    # NOT loaded: line_item.order is %Ash.NotLoaded{} here, the real
+    # default state after a plain create with no explicit load.
+    activity = %AshEx4pm.Activity{
+      name: :line_item_added,
+      on: :create,
+      resource: LineItem,
+      object_relationships: [
+        %AshEx4pm.ObjectRelationship{relationship: :order, qualifier: "placed_in"}
+      ]
+    }
+
+    notification = %Ash.Notifier.Notification{
+      resource: LineItem,
+      action: %{name: :create},
+      data: line_item
+    }
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+        assert envelope["object_relationships"] == []
+      end)
+
+    assert log =~ "could not resolve object_relationship"
+  end
+
+  test "a compile-time typo'd object_relationship name is refused, not silently swallowed" do
+    output =
+      capture_io(:stderr, fn ->
+        Code.compile_string("""
+        defmodule AshEx4pm.Test.BadO2O do
+          use Ash.Resource,
+            domain: nil,
+            validate_domain_inclusion?: false,
+            data_layer: Ash.DataLayer.Ets,
+            notifiers: [AshEx4pm.Notifier],
+            extensions: [AshEx4pm]
+
+          ex4pm do
+            activity :thing_created, :create do
+              object_relationship :not_a_real_relationship, "x"
+            end
+          end
+
+          actions do
+            defaults [:read, :destroy]
+            create :create
+          end
+
+          attributes do
+            uuid_primary_key :id
+          end
+        end
+        """)
+      end)
+
+    assert output =~ "object_relationship relationship: :not_a_real_relationship"
+    assert output =~ "does not exist on"
+  end
+
   test "an action with no matching activity does not attempt to emit anything" do
     {:ok, order} =
       Order
@@ -290,8 +427,6 @@ defmodule AshEx4pmTest do
   # re-raising it synchronously to the calling process. Capturing that
   # real warning text is therefore the correct, honest test strategy here
   # -- not a workaround for a real gap in the verifier.
-  import ExUnit.CaptureIO
-
   test "a compile-time typo'd action name is refused, not silently swallowed" do
     output =
       capture_io(:stderr, fn ->

@@ -86,6 +86,33 @@ defmodule AshEx4pm.Notifier do
   pattern) -- and note that such a change must itself read the resolved
   data the same way `build_envelope/2` does below (from the post-action
   record's relationship keys), not from a source that doesn't exist.
+
+  ## Declared O2O facts (a third, opt-in mechanism)
+
+  A resource author CAN additionally declare real OCEL 2.0 O2O (object-to-object)
+  facts for an activity via nested `object_relationship` entities (see
+  `AshEx4pm.ObjectRelationship`) -- e.g.
+  `object_relationship :customer, "placed_by"`
+  inside `activity :order_placed, on: :create do ... end`. Each declared
+  relationship is resolved from the notification's own *already-loaded*
+  target record (`Ash.Resource.Info.relationship/2` +
+  `Map.get(notification.data, relationship_name)`) and emitted into the
+  envelope's real `"object_relationships"` key (`Ex4pm.OCEL`'s genuinely
+  accepted `source_id`/`target_id`/`qualifier` shape -- confirmed against
+  `~/ex4pm/lib/ex4pm/ocel.ex`'s `normalize_object_relationships/1`). If
+  the target record was not loaded onto `notification.data` (e.g. the
+  action never selected/loaded that relationship), the fact is skipped
+  and logged rather than emitted with a fabricated or nil target id --
+  see `resolve_object_relationships/2`.
+
+  This still does not recover unresolved `manage_relationship/3` input,
+  and still does not attempt many-object events for actions that touch
+  several independently-notified resources at once. For that genuinely
+  different case, add a resource-level `Ash.Resource.Change` that builds
+  and returns a manual `%Ash.Notifier.Notification{}` carrying the full
+  object/relationship set for that action (see `action_input.ex`'s
+  manual-notification pattern) rather than relying on this notifier's
+  one-primary-object-per-action default.
   """
   use Ash.Notifier
   require Logger
@@ -167,6 +194,9 @@ defmodule AshEx4pm.Notifier do
       [primary_object | related_objects]
       |> Map.new(&{&1["id"], &1})
 
+    object_relationships =
+      resolve_object_relationships(activity, notification, record_id)
+
     %{
       "schema" => "ash_ex4pm/1",
       "producer" => %{
@@ -187,6 +217,7 @@ defmodule AshEx4pm.Notifier do
       # at 1 on every boot.
       "sequence" => System.os_time(:nanosecond),
       "objects" => objects,
+      "object_relationships" => object_relationships,
       "events" => [
         %{
           "id" => event_id(notification.resource, activity, record_id, timestamp),
@@ -462,6 +493,72 @@ defmodule AshEx4pm.Notifier do
   defp coerce_attribute(_value, _type), do: :error
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
+
+  # Resolves this activity's declared `object_relationship` entities (see
+  # `AshEx4pm.ObjectRelationship`) into the real, `Ex4pm.OCEL`-accepted
+  # `"object_relationships"` shape (`source_id`/`target_id`/`qualifier`,
+  # confirmed against `normalize_object_relationships/1` in
+  # `~/ex4pm/lib/ex4pm/ocel.ex`), using ONLY data already present on the
+  # notification -- never a fresh DB load, which would be a real,
+  # unauthorized side effect running inside a post-commit notifier.
+  #
+  # A relationship whose target record isn't loaded onto
+  # `notification.data` (the action never selected/loaded it) is skipped
+  # and logged -- a real, disclosed gap, never a fabricated or nil target
+  # id silently emitted into the envelope.
+  @doc false
+  def resolve_object_relationships(activity, notification, source_id) do
+    activity.object_relationships
+    |> Enum.map(&resolve_object_relationship(&1, notification, source_id))
+    |> Enum.filter(& &1)
+  end
+
+  defp resolve_object_relationship(rel, notification, source_id) do
+    resource = notification.resource
+
+    with true <- is_struct(notification.data),
+         definition when not is_nil(definition) <-
+           relationship_definition(resource, rel.relationship),
+         raw_target when not is_nil(raw_target) <- Map.get(notification.data, rel.relationship),
+         target when not is_nil(target) <- loaded_target(raw_target),
+         target_id when not is_nil(target_id) <- record_id(definition.destination, target) do
+      %{
+        "source_id" => source_id,
+        "target_id" => target_id,
+        "qualifier" => rel.qualifier
+      }
+    else
+      _ ->
+        Logger.warning(
+          "AshEx4pm.Notifier: could not resolve object_relationship " <>
+            "#{inspect(rel.relationship)} (qualifier #{inspect(rel.qualifier)}) -- " <>
+            "target not loaded on notification data; O2O fact omitted, not fabricated",
+          resource: resource,
+          activity: activity_name(notification)
+        )
+
+        nil
+    end
+  end
+
+  defp activity_name(%{action: %{name: name}}), do: name
+  defp activity_name(_), do: nil
+
+  # A `belongs_to`/`has_one` relationship loads a single struct (or nil,
+  # or `%Ash.NotLoaded{}`); `has_many`/`many_to_many` loads a list. This
+  # notifier's O2O model is a single source-to-single-target fact per
+  # declaration, so only a genuinely-loaded single struct resolves --
+  # anything else (a list, `%Ash.NotLoaded{}`, a lazy loader) is treated
+  # as unresolved rather than guessed at.
+  defp loaded_target(%Ash.NotLoaded{}), do: nil
+  defp loaded_target(%_{} = struct), do: struct
+  defp loaded_target(_), do: nil
+
+  defp relationship_definition(resource, relationship_name) do
+    Ash.Resource.Info.relationship(resource, relationship_name)
+  rescue
+    _ -> nil
+  end
 
   # Resolve the OCEL object id from the resource's real primary key
   # (Ash.Resource.Info.primary_key/1) rather than assuming an :id
