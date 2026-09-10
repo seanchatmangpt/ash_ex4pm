@@ -48,7 +48,7 @@ defmodule AshEx4pm.Changes.BrceGate do
     authority = authority_for(changeset, opts, context)
 
     Ash.Changeset.before_action(changeset, fn changeset ->
-      subject_hash = Ex4pm.Core.Hash.digest(%{resource: changeset.resource, operation: operation})
+      subject_hash = subject_hash(changeset, operation)
 
       case Ex4pm.Evidence.BRCE.execute(subject_hash, operation, authority, fn -> :admitted end) do
         {:ok, %{receipt: receipt}} ->
@@ -62,6 +62,28 @@ defmodule AshEx4pm.Changes.BrceGate do
           |> Ash.Changeset.add_error(field: :base, message: "BRCE-gated operation failed")
       end
     end)
+  end
+
+  # Include the changeset's actual per-record identity in the subject hash so
+  # that concurrent/different real changesets of the same resource+operation
+  # get distinguishable subject hashes -- resource+operation alone collapses
+  # every concurrent create into one identical subject, losing per-record
+  # traceability in Ex4pm.Evidence.Store.get_by_subject/2. For update/destroy
+  # the real primary key (already present on changeset.data) disambiguates by
+  # actual record; for create (no persisted id yet) the real attribute
+  # changes being admitted disambiguate concurrent creates with different
+  # data. Both are included unconditionally so a create that later becomes
+  # identifiable by primary key doesn't have to change shape.
+  defp subject_hash(changeset, operation) do
+    primary_key = Ash.Resource.Info.primary_key(changeset.resource)
+    primary_key_values = Map.new(primary_key, fn key -> {key, Map.get(changeset.data, key)} end)
+
+    Ex4pm.Core.Hash.digest(%{
+      resource: changeset.resource,
+      operation: operation,
+      primary_key: primary_key_values,
+      attributes: changeset.attributes
+    })
   end
 
   defp authority_for(changeset, opts, context) do
