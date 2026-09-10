@@ -13,22 +13,26 @@ defmodule AshEx4pm.Transformers.Persist do
      automatically; a domain-level `activity` entity must set `resource`
      explicitly (no implicit resource to infer it from) or compilation
      fails.
-  2. **Transformer ordering**: declares `after?/1` for Ash's own core
-     transformers, verbatim `ash_r2rml`'s five clauses
-     (`resource.ex:188-194`), so attribute/relationship/primary-key info
-     is settled before this transformer compiles activities.
+  2. **Transformer ordering**: `transform/1` below only reads/writes the
+     `:ex4pm` entities and the `:provenance_source` option -- it never reads
+     attributes, relationships, or primary-key info from `dsl_state`, so it
+     has no real data dependency on any specific core transformer. Rather
+     than enumerate a hand-picked list of transformers that happen not to
+     matter (which gives false confidence that dependencies are covered,
+     and misses any other core transformer not in the list), this follows
+     the real `AshAi.Transformers.ResourceTools` precedent
+     (`~/xaas/deps/ash_ai/lib/ash_ai/transformers/resource_tools.ex:11`),
+     whose `transform/1` has the same shape (only sets a field to the
+     module): `after?/1` returns `true` unconditionally, so this
+     transformer simply runs after everything else regardless of what
+     future `transform/1` changes come to need.
   """
   use Spark.Dsl.Transformer
 
   alias Spark.Dsl.Transformer
 
   @impl true
-  def after?(Ash.Resource.Transformers.CachePrimaryKey), do: true
-  def after?(Ash.Resource.Transformers.DefaultPrimaryKey), do: true
-  def after?(Ash.Resource.Transformers.SetRelationshipInformation), do: true
-  def after?(Ash.Resource.Transformers.BelongsToAttribute), do: true
-  def after?(Ash.Resource.Transformers.BelongsToSourceAttribute), do: true
-  def after?(_), do: false
+  def after?(_), do: true
 
   @impl true
   def transform(dsl_state) do
