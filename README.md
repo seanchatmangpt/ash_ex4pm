@@ -138,7 +138,7 @@ honestly as a real, unresolved gap rather than claimed as full DO-authority cove
 
 ## Status
 
-Real, working code: 25/25 tests passing (`mix test`), no mocks — real `Ash.DataLayer.Ets`
+Real, working code: 49/49 tests passing (`mix test`), no mocks — real `Ash.DataLayer.Ets`
 resources, real `AshEx4pm.Notifier` firing, real calls into `ex4pm`'s running
 `Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. This release includes 10 real hardening
 fixes from an adversarial Ash-maintainer-style review, all covered by the real tests

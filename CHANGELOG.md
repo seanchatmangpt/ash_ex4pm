@@ -4,6 +4,67 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [26.9.10] - 2026-09-10
+
+Merge pass over the OCEL 2.0-fidelity swarm's branches (base `9982bfa`),
+bringing the suite to 49/49 real tests passing (`test/ash_ex4pm_test.exs`),
+still Chicago-style throughout (no mocks).
+
+### Added
+
+- **Composed attribute-emission: declared/typed (default) + opt-in
+  automatic public-attribute-change capture.** `AshEx4pm.Notifier.event_attributes/2`
+  now takes the full `%Ash.Notifier.Notification{}` (not just post-commit
+  `data`) and merges two sources: the existing declared/typed
+  `attributes:` schema (unchanged default behavior, unchanged precedence)
+  and a new `attribute_change_attributes/2`, gated by a new
+  `track_attribute_changes?: boolean` activity DSL field (default
+  `false`). When `true` and the firing action is `:update`, every raw,
+  PUBLIC (`Ash.Resource.Info.public_attributes/1`) attribute change on
+  the notification's changeset that was NOT already explicitly declared
+  is captured automatically, string-keyed, into the same emitted event
+  `"attributes"` map -- declared/typed values always win on key
+  collision. No effect on `:create` (no prior value to diff) or when
+  `false` (zero behavior change for existing activities).
+- **`manage_relationship`-resolved O2O recovery.** `build_envelope/2`
+  now walks every relationship name present as a key in
+  `notification.changeset.relationships` (used only to know *which*
+  relationships this action's `manage_relationship` calls touched, never
+  its raw pre-commit values) and reads the real, resolved, post-commit
+  related record(s) directly off `notification.data`, emitting an
+  object + `"primary"`-scoped relationship entry per resolved related
+  record. `%Ash.NotLoaded{}` values are skipped, never fabricated.
+- **Declarative `object_relationship` DSL entity (O2O facts).** A new
+  `AshEx4pm.ObjectRelationship` nested entity, declarable inside an
+  `activity ... do ... end` block (`object_relationship :customer,
+  "placed_by"`), resolved from the notification's own already-loaded
+  target record and emitted into the envelope's real
+  `"object_relationships"` key (`source_id`/`target_id`/`qualifier`,
+  matching `Ex4pm.OCEL.normalize_object_relationships/1`'s accepted
+  shape). Compile-time validated against real Ash relationships by
+  `AshEx4pm.Verifiers.Verify`. A target not loaded on
+  `notification.data` is skipped and logged, never fabricated.
+
+### Rejected (design decision, not merged)
+
+- `fix/notifier-ocel-attributes` -- redundant: dumps raw
+  `changeset.attributes` unconditionally with no type coercion and no
+  public/private filtering, a real information-disclosure regression
+  relative to this release's composed mechanism, which subsumes
+  everything it captured more safely.
+- `fix/notifier-data-relationships` -- real bug: emits relationships
+  based on whether they are *loaded* on `notification.data`, not
+  whether this action's `manage_relationship` actually touched them,
+  misclassifying ordinary `load:`-driven read-backs as relational
+  events. Superseded by this release's changeset-scoped recovery.
+- `fix/notifier-relationship-objects` -- stale/regressive branch
+  relative to the `299d716` baseline (strips primary-key resolution and
+  refusal logging that already exist on main); not a faithful
+  alternative design.
+- `fix/ocel-attribute-history` -- its correct update-scoped diff logic
+  was adapted directly into `attribute_change_attributes/2` above
+  rather than merged as a separate parallel code path.
+
 ## [Unreleased] - 2026-09-09
 
 Hardening pass: 10 real fixes from an adversarial Ash-maintainer-style review,

@@ -322,7 +322,10 @@ defmodule AshEx4pm.Notifier do
   # declared-name exclusion bookkeeping is needed in
   # `attribute_change_attributes/2`.
   @doc false
-  def event_attributes(%{attributes: attributes} = activity, %Ash.Notifier.Notification{} = notification)
+  def event_attributes(
+        %{attributes: attributes} = activity,
+        %Ash.Notifier.Notification{} = notification
+      )
       when is_list(attributes) do
     declared = declared_event_attributes(attributes, notification.data)
     history = attribute_change_attributes(activity, notification)
