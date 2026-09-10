@@ -72,10 +72,24 @@ defmodule AshEx4pm.Test.Widget do
 end
 
 defmodule AshEx4pm.Test.LineItem do
-  @moduledoc "Real related Ash resource -- appended via manage_relationship on Order."
+  @moduledoc """
+  Real related Ash resource -- appended via manage_relationship on Order.
+
+  Also declares a real `object_relationship` (relationship: :order,
+  qualifier: "placed_in") so `AshEx4pm.Notifier.build_envelope/2`'s real
+  O2O-emission path has a real resource/relationship to resolve against.
+  """
   use Ash.Resource,
     domain: AshEx4pm.Test.Domain,
-    data_layer: Ash.DataLayer.Ets
+    data_layer: Ash.DataLayer.Ets,
+    notifiers: [AshEx4pm.Notifier],
+    extensions: [AshEx4pm]
+
+  ex4pm do
+    activity :line_item_added, :create do
+      object_relationship(:order, "placed_in")
+    end
+  end
 
   actions do
     defaults([:read, :destroy])
