@@ -26,13 +26,23 @@ defmodule AshEx4pm.Activity do
   opt into `object_type:`.
   """
   @enforce_keys [:name, :on]
-  defstruct [:name, :on, :resource, :object_type, :__identifier__, :__spark_metadata__]
+  defstruct [
+    :name,
+    :on,
+    :resource,
+    :object_type,
+    attributes: [],
+    __identifier__: nil,
+    __spark_metadata__: nil
+  ]
 
+  @type attribute_type :: :string | :integer | :float | :boolean | :atom | :date | :datetime
   @type t :: %__MODULE__{
           name: atom(),
           on: atom(),
           resource: module() | nil,
-          object_type: atom() | nil
+          object_type: atom() | nil,
+          attributes: [{atom(), attribute_type()}]
         }
 end
 
@@ -107,6 +117,23 @@ defmodule AshEx4pm.Dsl do
             "to compile otherwise. When unset, the OCEL object type is derived from the " <>
             "resource's own module name (AshEx4pm.Notifier.resource_type_name/1), a " <>
             "real, disclosed back-compat fallback with no declared attribute contract."
+      ],
+      attributes: [
+        type: :keyword_list,
+        required: false,
+        default: [],
+        doc:
+          "OCEL 2.0 event-type attribute schema for this activity, e.g. " <>
+            "`attributes: [carrier: :string, weight: :integer]` -- a keyword " <>
+            "list of `{name :: atom, type :: :string | :integer | :float | " <>
+            ":boolean | :atom | :date | :datetime}` pairs. Distinct from " <>
+            "`object_type`'s own `attributes:` (declared OBJECT attributes): this " <>
+            "declares what an *event* of this activity always carries. " <>
+            "AshEx4pm.Transformers.Persist validates every declared type against " <>
+            "this allowed set at compile time; AshEx4pm.Notifier.build_envelope/2 " <>
+            "reads these keys off the notification's data to populate the " <>
+            "emitted event's real \"attributes\" map, rather than emitting " <>
+            "whatever happens to be left over in the raw map."
       ]
     ]
   }

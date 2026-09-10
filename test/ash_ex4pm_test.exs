@@ -284,6 +284,127 @@ defmodule AshEx4pmTest do
     end
   end
 
+  test "an activity with an unsupported declared attribute type is refused at compile time" do
+    assert_raise Spark.Error.DslError, ~r/unsupported type :strnig/, fn ->
+      Code.compile_string("""
+      defmodule AshEx4pm.Test.BadAttributeTypeOrder do
+        use Ash.Resource,
+          domain: nil,
+          validate_domain_inclusion?: false,
+          data_layer: Ash.DataLayer.Ets,
+          notifiers: [AshEx4pm.Notifier],
+          extensions: [AshEx4pm]
+
+        ex4pm do
+          activity :order_created, on: :create, attributes: [carrier: :strnig]
+        end
+
+        actions do
+          defaults [:read, :destroy]
+          create :create
+        end
+
+        attributes do
+          uuid_primary_key :id
+        end
+      end
+      """)
+    end
+  end
+
+  test "build_envelope/2 populates the event's real \"attributes\" map from the activity's declared, typed attribute schema" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    changeset = Ash.Changeset.for_update(order, :ship, %{})
+    {:ok, shipped_order} = Ash.update(changeset)
+
+    activity = %AshEx4pm.Activity{
+      name: :order_shipped,
+      on: :ship,
+      resource: Order,
+      attributes: [status: :atom]
+    }
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :ship},
+      data: shipped_order,
+      changeset: changeset
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+    [event] = envelope["events"]
+
+    # Real, state-based assertion: the declared :status attribute (an
+    # AshEx4pm.Activity real Ash :atom field, value :shipped after the
+    # real `ship` action ran) is coerced to its declared type and
+    # populated onto the emitted event's real "attributes" key -- the
+    # exact sub-key Ex4pm.OCEL.normalize_event/2 recognizes explicitly
+    # (`~/ex4pm/lib/ex4pm/ocel.ex` drop_known_event_keys/1 +
+    # normalize_attributes/1), not left as whatever happened to be
+    # leftover in the raw map.
+    assert event["attributes"] == %{"status" => "shipped"}
+  end
+
+  test "build_envelope/2 omits a declared attribute whose real value is nil, rather than emitting a fabricated value" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{
+      name: :order_created,
+      on: :create,
+      resource: Order,
+      attributes: [status: :atom, nonexistent_field: :string]
+    }
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create},
+      data: order,
+      changeset: nil
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+    [event] = envelope["events"]
+
+    assert event["attributes"] == %{"status" => "pending"}
+    refute Map.has_key?(event["attributes"], "nonexistent_field")
+  end
+
+  test "the real Ex4pm.OCEL.validate_envelope/1 accepts an envelope carrying declared typed attributes" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{
+      name: :order_created,
+      on: :create,
+      resource: Order,
+      attributes: [status: :atom]
+    }
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create},
+      data: order,
+      changeset: nil
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+    # Confirms the fix's envelope shape is actually accepted by ex4pm's
+    # real, unmocked downstream validator -- not just self-consistent
+    # within ash_ex4pm.
+    assert {:ok, validated} = Ex4pm.OCEL.validate_envelope(envelope)
+    assert is_list(validated.events)
+  end
+
   test "AshEx4pm.Changes.BrceGate refuses an action with no admitted authority" do
     result =
       AshEx4pm.Test.GatedResource

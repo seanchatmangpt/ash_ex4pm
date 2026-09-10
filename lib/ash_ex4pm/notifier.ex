@@ -153,7 +153,8 @@ defmodule AshEx4pm.Notifier do
           "id" => event_id(notification.resource, activity, record_id, timestamp),
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.to_iso8601(timestamp),
-          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}]
+          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}],
+          "attributes" => event_attributes(activity, notification.data)
         }
       ]
     }
@@ -224,6 +225,43 @@ defmodule AshEx4pm.Notifier do
 
   defp declared_attributes(_object_type, _data), do: %{}
 
+  # Populates the emitted event's real OCEL "attributes" map from the
+  # activity's compiled `attributes: [name: type, ...]` schema
+  # (AshEx4pm.Transformers.Persist already refused any unsupported type at
+  # compile time -- see @allowed_attribute_types there) and the
+  # notification's own post-commit data, coercing each present value to
+  # its declared type. A declared attribute whose value is nil or absent
+  # from `data`, or whose real value fails coercion to its declared type,
+  # is left out of the emitted map (never silently emitted as a wrong-typed
+  # or fabricated value) and logged so the gap is visible rather than
+  # silently swallowed.
+  @doc false
+  def event_attributes(%{attributes: attributes}, data) when is_list(attributes) do
+    attributes
+    |> Enum.reduce(%{}, fn {name, type}, acc ->
+      case fetch_field(data, name) do
+        {:ok, raw_value} ->
+          case coerce_attribute(raw_value, type) do
+            {:ok, coerced} ->
+              Map.put(acc, to_string(name), coerced)
+
+            :error ->
+              Logger.warning(
+                "AshEx4pm.Notifier: attribute #{inspect(name)} value #{inspect(raw_value)} " <>
+                  "does not match declared type #{inspect(type)}; omitting from emitted event"
+              )
+
+              acc
+          end
+
+        :error ->
+          acc
+      end
+    end)
+  end
+
+  def event_attributes(_activity, _data), do: %{}
+
   # Deterministic, globally-unique, restart-stable event id: a SHA-256
   # digest of (resource module, activity name, resolved record id,
   # ISO-8601 timestamp), not System.unique_integer/1 (process-local,
@@ -244,6 +282,43 @@ defmodule AshEx4pm.Notifier do
 
     "ev_" <> digest
   end
+
+  defp fetch_field(data, name) when is_struct(data) do
+    case Map.fetch(data, name) do
+      {:ok, nil} -> :error
+      {:ok, value} -> {:ok, value}
+      :error -> :error
+    end
+  end
+
+  defp fetch_field(data, name) when is_map(data) do
+    case Map.fetch(data, to_string(name)) do
+      {:ok, nil} -> :error
+      {:ok, value} -> {:ok, value}
+      :error -> :error
+    end
+  end
+
+  defp fetch_field(_data, _name), do: :error
+
+  defp coerce_attribute(value, :string) when is_binary(value), do: {:ok, value}
+  defp coerce_attribute(value, :string) when is_atom(value), do: {:ok, to_string(value)}
+
+  defp coerce_attribute(value, :integer) when is_integer(value), do: {:ok, value}
+
+  defp coerce_attribute(value, :float) when is_float(value), do: {:ok, value}
+  defp coerce_attribute(value, :float) when is_integer(value), do: {:ok, value * 1.0}
+
+  defp coerce_attribute(value, :boolean) when is_boolean(value), do: {:ok, value}
+
+  defp coerce_attribute(value, :atom) when is_atom(value), do: {:ok, to_string(value)}
+
+  defp coerce_attribute(%Date{} = value, :date), do: {:ok, Date.to_iso8601(value)}
+
+  defp coerce_attribute(%DateTime{} = value, :datetime),
+    do: {:ok, DateTime.to_iso8601(value)}
+
+  defp coerce_attribute(_value, _type), do: :error
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
 
