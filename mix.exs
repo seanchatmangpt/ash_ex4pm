@@ -30,27 +30,31 @@ defmodule AshEx4pm.MixProject do
     [
       {:ash, "~> 3.0"},
       {:spark, "~> 2.2"},
-      # Real path dependency -- ash_ex4pm is developed alongside its one
-      # real consumer/provider, ex4pm, per this repo's own PRD/ARD
-      # (~/ex4pm/docs/explanation/ash-ex4pm-prd-ard.md). Every OCEL
-      # envelope this extension builds is validated and ingested through
-      # ex4pm's own real, canonical functions -- never a hand-rolled
-      # struct or a re-implemented ingest path.
-      {:ex4pm, path: "../ex4pm"},
+      # Real hex dependency, 2026-09-10 -- ex4pm v26.9.9 is published on
+      # Hex (hex.pm/packages/ex4pm/26.9.9, checksum
+      # 721d62414e9ac870c897af7c78a755c360b3315e3d8f5b0b32a75c8bd72a0b00,
+      # tagged v26.9.9 in ~/ex4pm). Was a path dependency during initial
+      # co-development (see git history) -- switched now that a real,
+      # tagged, checksum-verifiable release exists, per this repo's own
+      # PRD (~/ex4pm/docs/explanation/ash-ex4pm-prd-ard.md) and the goal
+      # of being a real, independently hex-publishable package.
+      {:ex4pm, "~> 26.9"},
       {:igniter, "~> 0.5", optional: true},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
 
   defp description do
-    "Ash extension for automatic OCEL 2.0 event emission, built on ex4pm's " <>
-      "canonical Ex4pm.OCEL.normalize/1 and Ex4pm.Stream.Ingest.ingest_envelope/2."
+    "Ash extension for automatic OCEL 2.0 event emission and an optional BRCE " <>
+      "admission gate, built on ex4pm's real Ex4pm.Stream.Ingest.ingest_envelope/1 " <>
+      "and Ex4pm.Evidence.BRCE.execute/4."
   end
 
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url}
+      links: %{"GitHub" => @source_url},
+      maintainers: ["Sean Chatman"]
     ]
   end
 
