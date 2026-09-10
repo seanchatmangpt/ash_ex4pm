@@ -16,7 +16,7 @@ defmodule Mix.Tasks.AshEx4pm.Ggen.Sync do
   is a real, resolvable path once `mix deps.get && mix compile` has run,
   because ex4pm's own `mix.exs` declares `files: ["lib", "priv",
   "mix.exs"]` -- `priv/` ships with the Hex package. No second ontology
-  copy is forked; if ex4pm hasn't yet released the ferroplan-capability
+  copy is forked; if ex4pm hasn't yet released the planning-capability
   individuals this repo wants to generate from, bump the `{:ex4pm, ...}`
   pin in `mix.exs` first.
 
@@ -24,7 +24,7 @@ defmodule Mix.Tasks.AshEx4pm.Ggen.Sync do
 
       mix ash_ex4pm.ggen.sync
       mix ash_ex4pm.ggen.sync --manifest priv/ggen/manifest.json
-      mix ash_ex4pm.ggen.sync --unit ferroplan
+      mix ash_ex4pm.ggen.sync --unit automated_planning
   """
   use Mix.Task
 

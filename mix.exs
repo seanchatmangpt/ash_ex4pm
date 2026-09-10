@@ -48,7 +48,7 @@ defmodule AshEx4pm.MixProject do
       # revisit and loosen this constraint.
       {:ex4pm, "== 26.9.9"},
       {:igniter, "~> 0.5", optional: true},
-      # ggen_igniter drives this repo's own admitted-ferroplan-capability
+      # ggen_igniter drives this repo's own admitted-planning-capability
       # generation unit (mix ash_ex4pm.ggen.sync) -- see
       # priv/ggen/manifest.json. Not runtime: this repo ships no ontology
       # of its own; it re-queries the ex4pm dependency's packaged

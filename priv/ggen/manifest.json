@@ -1,12 +1,12 @@
 [
   {
-    "name": "ferroplan",
+    "name": "automated_planning",
     "ontology": "{{ex4pm_ontology}}",
     "query_bindings": {
-      "admitted": "priv/ggen/queries/admitted_ferroplan_activities.rq"
+      "admitted": "priv/ggen/queries/admitted_planning_activities.rq"
     },
-    "template": "priv/ggen/templates/ferroplan.ex.eex",
-    "out": "lib/ash_ex4pm/ferroplan.ex",
+    "template": "priv/ggen/templates/automated_planning.ex.eex",
+    "out": "lib/ash_ex4pm/automated_planning.ex",
     "test_path": null
   }
 ]

@@ -1,5 +1,14 @@
 {
   "entries": {
+    "priv/ggen/templates/automated_planning.ex.eex=>lib/ash_ex4pm/automated_planning.ex": {
+      "out_template": "lib/ash_ex4pm/automated_planning.ex",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/lib/ash_ex4pm/automated_planning.ex": "sha256:579d611a764be97fbda25eb31cfea4c6a5ef0018b6d6177ade409e767766bcf1"
+      },
+      "pack_dir": null,
+      "template": "priv/ggen/templates/automated_planning.ex.eex",
+      "updated_at": "2026-09-10T18:34:52.338969Z"
+    },
     "priv/ggen/templates/ferroplan.ex.eex=>lib/ash_ex4pm/ferroplan.ex": {
       "out_template": "lib/ash_ex4pm/ferroplan.ex",
       "outputs": {
