@@ -26,6 +26,23 @@ defmodule AshEx4pm.Changes.BrceGate do
   own real short-circuit (`execute/4` never calls `fun` on refusal,
   `evidence.ex:229`).
 
+  ## Ordering guarantee relative to other `before_action` hooks
+
+  `Ash.Changeset.before_action/3` appends to `changeset.before_action` by
+  default, and `run_before_actions/1` runs that list strictly in
+  declaration order. If two changes on the same action both register a
+  `before_action` hook, whichever change appears first in the resource's
+  `changes:`/action DSL list runs first -- Ash gives no change
+  first-class priority based on its purpose. To guarantee the admission
+  gate always runs before any other `before_action` side effect
+  (an audit-log write, an external call, another field-mutating hook)
+  regardless of where `change {AshEx4pm.Changes.BrceGate, ...}` is
+  declared relative to those other changes, this module registers its
+  hook with `prepend?: true`, which inserts it at the head of
+  `changeset.before_action` instead of appending. Declaration order
+  among *other* `before_action` hooks (relative to each other) is
+  unaffected -- only BRCE's own hook is pinned to run first.
+
   ## Honest scope limitation
 
   `BRCE.execute/4`'s `fun` argument here is a pure admission placeholder
@@ -47,21 +64,26 @@ defmodule AshEx4pm.Changes.BrceGate do
     operation = Keyword.fetch!(opts, :operation)
     authority = authority_for(changeset, opts, context)
 
-    Ash.Changeset.before_action(changeset, fn changeset ->
-      subject_hash = Ex4pm.Core.Hash.digest(%{resource: changeset.resource, operation: operation})
+    Ash.Changeset.before_action(
+      changeset,
+      fn changeset ->
+        subject_hash =
+          Ex4pm.Core.Hash.digest(%{resource: changeset.resource, operation: operation})
 
-      case Ex4pm.Evidence.BRCE.execute(subject_hash, operation, authority, fn -> :admitted end) do
-        {:ok, %{receipt: receipt}} ->
-          Ash.Changeset.put_context(changeset, :ash_ex4pm_brce_receipt, receipt)
+        case Ex4pm.Evidence.BRCE.execute(subject_hash, operation, authority, fn -> :admitted end) do
+          {:ok, %{receipt: receipt}} ->
+            Ash.Changeset.put_context(changeset, :ash_ex4pm_brce_receipt, receipt)
 
-        {:error, %Ex4pm.Refusal{} = refusal} ->
-          Ash.Changeset.add_error(changeset, field: :base, message: refusal.message)
+          {:error, %Ex4pm.Refusal{} = refusal} ->
+            Ash.Changeset.add_error(changeset, field: :base, message: refusal.message)
 
-        {:error, %{error: _error, receipt: receipt}} ->
-          Ash.Changeset.put_context(changeset, :ash_ex4pm_brce_receipt, receipt)
-          |> Ash.Changeset.add_error(field: :base, message: "BRCE-gated operation failed")
-      end
-    end)
+          {:error, %{error: _error, receipt: receipt}} ->
+            Ash.Changeset.put_context(changeset, :ash_ex4pm_brce_receipt, receipt)
+            |> Ash.Changeset.add_error(field: :base, message: "BRCE-gated operation failed")
+        end
+      end,
+      prepend?: true
+    )
   end
 
   defp authority_for(changeset, opts, context) do
