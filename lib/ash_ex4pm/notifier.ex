@@ -136,11 +136,38 @@ defmodule AshEx4pm.Notifier do
           "id" => "ev_#{System.unique_integer([:positive])}",
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}]
+          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}],
+          "attributes" => event_attributes(notification.changeset)
         }
       ]
     }
   end
+
+  # Real Ash.Changeset attribute-change payload for this event, keyed as
+  # `Ex4pm.OCEL.validate_envelope/1` -> `Ex4pm.OCEL.normalize/1` expects
+  # (a plain string-keyed map merged straight into `%Ex4pm.OCEL.Event{
+  # attributes: ...}` by `drop_known_event_keys/1`, confirmed against
+  # `~/ex4pm/lib/ex4pm/ocel.ex`'s "attributes"/:attributes extraction and
+  # `Ex4pm.OCEL2.attribute_history/3`'s `event.attributes` fallback lookup
+  # in `~/ex4pm/lib/ex4pm/ocel2.ex`).
+  #
+  # `changeset.attributes` (not `Ash.Changeset.get_changes/1`, which does
+  # not exist on the pinned Ash version -- confirmed by grep) is Ash's own
+  # real map of attribute name -> newly-set value for every attribute this
+  # changeset actually changed, populated by `Ash.Changeset.change_attribute/3`
+  # and friends on every real `:create`/`:update` action -- not a diff we
+  # compute ourselves, so it already carries only genuinely-changed values,
+  # never the full unchanged record. A notification with no changeset (a
+  # hand-built `%Ash.Notifier.Notification{}` from a generic action, per
+  # `record_id/2`'s own fallback path above) yields an empty attributes
+  # map rather than raising -- there is no changed-attribute payload to
+  # report when there is no changeset to read one from.
+  @doc false
+  def event_attributes(%Ash.Changeset{attributes: attributes}) when is_map(attributes) do
+    Map.new(attributes, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  def event_attributes(_), do: %{}
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
 
