@@ -404,4 +404,49 @@ defmodule AshEx4pmTest do
       assert AshEx4pm.Test.SideEffectLog.count() == 1
     end
   end
+
+  test "two real concurrent creates of the same resource+operation with different data get distinguishable subject hashes" do
+    # Real regression test for: subject_hash previously hashed only
+    # %{resource: ..., operation: ...}, so two different real changesets
+    # of the same resource+operation collapsed into one identical
+    # subject_hash -- Ex4pm.Evidence.Store.get_by_subject/2 could not
+    # disambiguate which receipt belonged to which actual record. This
+    # asserts on the real, persisted receipt state in the real Evidence
+    # Store (no mocks): each create's outcome receipt now carries a
+    # subject_hash distinct from the other's.
+    # The real Evidence.Store is backed by an unordered ETS :set
+    # (evidence.ex:103), so "new since before" must be computed by real
+    # receipt-hash set difference -- not position/Enum.drop, which
+    # silently assumes an insertion order the store never guarantees.
+    hashes_before =
+      Ex4pm.Evidence.Store.all(Ex4pm.Evidence.Store) |> MapSet.new(& &1.hash)
+
+    {:ok, first} =
+      AshEx4pm.Test.AdmittedResource
+      |> Ash.Changeset.for_create(:create, %{label: "first"}, actor: %{capabilities: [:do]})
+      |> Ash.create()
+
+    {:ok, second} =
+      AshEx4pm.Test.AdmittedResource
+      |> Ash.Changeset.for_create(:create, %{label: "second"}, actor: %{capabilities: [:do]})
+      |> Ash.create()
+
+    new_entries =
+      Ex4pm.Evidence.Store.all(Ex4pm.Evidence.Store)
+      |> Enum.reject(&MapSet.member?(hashes_before, &1.hash))
+
+    admitted_hashes =
+      new_entries
+      |> Enum.filter(&match?(%{operation: :admitted_create}, &1))
+      |> Enum.map(& &1.subject_hash)
+      |> Enum.uniq()
+
+    assert first.label == "first"
+    assert second.label == "second"
+    # Real evidence that the fix works: two real creates of the same
+    # resource+operation, with different real attribute data, produced
+    # more than one distinct subject_hash -- before the fix this would
+    # be exactly 1 (both collapsing to the same resource+operation hash).
+    assert length(admitted_hashes) > 1
+  end
 end

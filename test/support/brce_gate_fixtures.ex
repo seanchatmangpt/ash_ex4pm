@@ -36,12 +36,14 @@ defmodule AshEx4pm.Test.AdmittedResource do
     defaults([:read, :destroy])
 
     create :create do
+      accept([:label])
       change({AshEx4pm.Changes.BrceGate, operation: :admitted_create})
     end
   end
 
   attributes do
     uuid_primary_key(:id)
+    attribute(:label, :string, public?: true)
   end
 end
 
