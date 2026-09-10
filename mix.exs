@@ -57,6 +57,21 @@ defmodule AshEx4pm.MixProject do
       # than forking a second copy, avoiding the two-repo-drift problem
       # ex4pm's own ex4pmb: prefix comment already flags for beam4pm/ex4pm.
       {:ggen_igniter, "~> 26.9", only: [:dev, :test], runtime: false},
+      # Chicago-style test fixture only (test/support/micro_beam4pm.ex): a
+      # real local Ash resource + AshJsonApi.Router + real Bandit HTTP
+      # server standing in for beam4pm's own (not-yet-mounted) json_api
+      # surface, so Ex4pm.Engine.Beam4pm's real request/response contract
+      # is exercised end to end through THIS repo's own dependency graph
+      # rather than mocked -- same fixture shape as ex4pm's own
+      # test/support/micro_beam4pm.ex. Not a runtime dependency.
+      {:bandit, "~> 1.5", only: :test},
+      {:ash_json_api, "~> 1.7", only: :test},
+      # Real finding, confirmed empirically (mirrors ex4pm's own mix.exs
+      # comment): ash_json_api's open_api rendering path silently 500s
+      # without this -- `open_api_spex` is declared optional in
+      # ash_json_api's own mix.exs and is NOT pulled in transitively just
+      # by depending on ash_json_api.
+      {:open_api_spex, "~> 3.16", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end

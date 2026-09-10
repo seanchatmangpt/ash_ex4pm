@@ -8,5 +8,15 @@
     "template": "priv/ggen/templates/automated_planning.ex.eex",
     "out": "lib/ash_ex4pm/automated_planning.ex",
     "test_path": null
+  },
+  {
+    "name": "micro_beam4pm_fixture",
+    "ontology": "{{ex4pm_ontology}}",
+    "query_bindings": {
+      "admitted": "priv/ggen/queries/admitted_beam4pm_services_live.rq"
+    },
+    "template": "priv/ggen/templates/micro_beam4pm.ex.eex",
+    "out": "test/support/micro_beam4pm.ex",
+    "test_path": "test/integration/beam4pm_via_ex4pm_test.exs"
   }
 ]

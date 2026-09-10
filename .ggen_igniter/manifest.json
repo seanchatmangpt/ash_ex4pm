@@ -26,6 +26,15 @@
       "pack_dir": null,
       "template": "priv/ggen/templates/ferroplan.ex.eex",
       "updated_at": "2026-09-10T17:27:32.426954Z"
+    },
+    "priv/ggen/templates/micro_beam4pm.ex.eex=>test/support/micro_beam4pm.ex": {
+      "out_template": "test/support/micro_beam4pm.ex",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/test/support/micro_beam4pm.ex": "sha256:257c1bef4b3c29f05e20dc55cb485a6e07d2fa5a2953b0ad626e4b1e407d97d0"
+      },
+      "pack_dir": null,
+      "template": "priv/ggen/templates/micro_beam4pm.ex.eex",
+      "updated_at": "2026-09-10T19:44:09.991853Z"
     }
   },
   "schema_version": "1",
