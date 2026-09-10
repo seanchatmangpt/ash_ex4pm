@@ -28,6 +28,7 @@ defmodule AshEx4pm.Notifier do
   discover/conform), not what the real-time ingest function consumes.
   """
   use Ash.Notifier
+  require Logger
 
   @impl Ash.Notifier
   def notify(%Ash.Notifier.Notification{} = notification) do
@@ -66,7 +67,7 @@ defmodule AshEx4pm.Notifier do
     provenance_source =
       AshEx4pm.Info.compiled(notification.resource)[:provenance_source] || :ash_ex4pm
 
-    record_id = record_id(notification.data)
+    record_id = record_id(notification.resource, notification.data)
 
     %{
       "schema" => "ash_ex4pm/1",
@@ -95,12 +96,66 @@ defmodule AshEx4pm.Notifier do
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
 
-  defp record_id(data) do
+  # Resolve the OCEL object id from the resource's real primary key
+  # (Ash.Resource.Info.primary_key/1) rather than assuming an :id
+  # attribute -- Ash resources are not required to be named :id and may
+  # have a composite primary key. Falls back to a plain "id"/"id" map
+  # lookup for notification.data that isn't a persisted resource struct
+  # at all (e.g. a hand-built %Ash.Notifier.Notification{} from a
+  # generic action's before_action/after_action hook, per
+  # Ash.ActionInput's own doctest). A resolved-but-nil primary key, or no
+  # resolvable id at all, is a distinct, logged, clearly-synthetic
+  # fallback -- never a silently-empty string or an unmarked random id.
+  @doc false
+  def record_id(resource, data) do
+    with true <- is_atom(resource) and is_struct(data),
+         [_ | _] = pk <- primary_key(resource),
+         values when is_list(values) <- pk_values(data, pk) do
+      Enum.map_join(values, ":", &to_string/1)
+    else
+      _ -> record_id_fallback(resource, data)
+    end
+  end
+
+  defp primary_key(resource) do
+    Ash.Resource.Info.primary_key(resource)
+  rescue
+    _ -> []
+  end
+
+  # Returns the list of primary-key values only if every one is present
+  # and non-nil; otherwise :error, so a nil/unset pk field never falls
+  # through as an empty string.
+  defp pk_values(data, pk) do
+    Enum.reduce_while(pk, [], fn field, acc ->
+      case Map.fetch(data, field) do
+        {:ok, nil} -> {:halt, :error}
+        {:ok, value} -> {:cont, [value | acc]}
+        :error -> {:halt, :error}
+      end
+    end)
+    |> case do
+      :error -> :error
+      values -> Enum.reverse(values)
+    end
+  end
+
+  defp record_id_fallback(resource, data) do
     cond do
-      is_struct(data) and Map.has_key?(data, :id) -> to_string(data.id)
-      is_map(data) and Map.has_key?(data, :id) -> to_string(data.id)
-      is_map(data) and Map.has_key?(data, "id") -> to_string(data["id"])
-      true -> "obj_#{System.unique_integer([:positive])}"
+      is_map(data) and Map.has_key?(data, :id) and not is_nil(data.id) ->
+        to_string(data.id)
+
+      is_map(data) and Map.has_key?(data, "id") and not is_nil(data["id"]) ->
+        to_string(data["id"])
+
+      true ->
+        Logger.warning(
+          "AshEx4pm.Notifier: could not resolve a real primary key for " <>
+            "#{inspect(resource)} notification data #{inspect(data)}; " <>
+            "using a synthetic, non-reproducible object id"
+        )
+
+        "synthetic_obj_#{System.unique_integer([:positive])}"
     end
   end
 end

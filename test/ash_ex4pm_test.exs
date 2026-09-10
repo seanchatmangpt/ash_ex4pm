@@ -154,4 +154,53 @@ defmodule AshEx4pmTest do
 
     assert {:ok, _} = result
   end
+
+  alias AshEx4pm.Test.Widget
+
+  describe "record_id/2 -- real primary key resolution (not a hardcoded :id assumption)" do
+    test "resolves a real, non-:id-named primary key from a real Ash struct" do
+      widget = %Widget{sku: "SKU-42"}
+
+      assert AshEx4pm.Notifier.record_id(Widget, widget) == "SKU-42"
+    end
+
+    test "a real create action on a resource with a non-:id primary key emits the real sku as the object id" do
+      {:ok, widget} =
+        Widget
+        |> Ash.Changeset.for_create(:create, %{sku: "SKU-99"})
+        |> Ash.create()
+
+      assert widget.sku == "SKU-99"
+
+      # Real, observable evidence: the ex4pm ingest receipt for this
+      # create landed with our real provenance agent_id -- the
+      # notifier did not crash or silently no-op while resolving the
+      # non-:id primary key.
+      entries = Ex4pm.Evidence.Store.all(Ex4pm.Evidence.Store)
+
+      assert Enum.any?(entries, fn r ->
+               match?(%{operation: {:ingest, :batch}}, r) and
+                 Map.get(r.metadata || %{}, :agent_id) == "ash_ex4pm"
+             end)
+    end
+
+    test "a struct with a nil primary key value falls back to a clearly-synthetic id, never an empty string" do
+      widget = %Widget{sku: nil}
+
+      assert "synthetic_obj_" <> _ = AshEx4pm.Notifier.record_id(Widget, widget)
+    end
+
+    test "a plain map with an :id key (e.g. a hand-built generic-action notification) uses that id" do
+      assert AshEx4pm.Notifier.record_id(Widget, %{id: "abc"}) == "abc"
+    end
+
+    test "a plain map with a nil :id value falls back to a synthetic id, not an empty string" do
+      assert "synthetic_obj_" <> _ = AshEx4pm.Notifier.record_id(Widget, %{id: nil})
+    end
+
+    test "data with no resolvable id at all (e.g. Ash.ActionInput's arbitrary generic-action data) falls back to a synthetic id" do
+      assert "synthetic_obj_" <> _ =
+               AshEx4pm.Notifier.record_id(Widget, %{audit: "before_action"})
+    end
+  end
 end
