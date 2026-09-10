@@ -154,4 +154,15 @@ defmodule AshEx4pmTest do
 
     assert {:ok, _} = result
   end
+
+  test "the :activity entity carries a real entity-level describe: for Spark doc generation" do
+    entity =
+      AshEx4pm.Dsl.section()
+      |> Map.fetch!(:entities)
+      |> Enum.find(&(&1.name == :activity))
+
+    assert %Spark.Dsl.Entity{} = entity
+    assert is_binary(entity.describe)
+    assert entity.describe != ""
+  end
 end

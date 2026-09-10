@@ -30,6 +30,7 @@ defmodule AshEx4pm.Dsl do
 
   @activity %Spark.Dsl.Entity{
     name: :activity,
+    describe: "Declares a single OCEL activity emitted for one Ash action.",
     args: [:name, {:optional, :on}],
     target: AshEx4pm.Activity,
     identifier: :name,
