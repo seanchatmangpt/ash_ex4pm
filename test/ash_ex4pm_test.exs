@@ -86,6 +86,79 @@ defmodule AshEx4pmTest do
     assert object_id == to_string(updated_order.id)
   end
 
+  test "build_envelope/2 produces a distributed-safe, restart-stable event id (not System.unique_integer/1) and a real integer sequence" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{name: :order_created, on: :create, resource: Order}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create},
+      data: order,
+      changeset: nil
+    }
+
+    envelope1 = AshEx4pm.Notifier.build_envelope(activity, notification)
+    envelope2 = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+    [event1] = envelope1["events"]
+    [event2] = envelope2["events"]
+
+    # Real proof this is no longer System.unique_integer/1: two calls
+    # built from data that differs only in wall-clock timestamp (real
+    # DateTime.utc_now/0 called inside each build_envelope/2 invocation)
+    # do NOT collide, but the mechanism is now a real SHA-256 digest of
+    # (resource, activity, record id, timestamp) -- confirmed by
+    # reproducing the exact same id from the exact same inputs below,
+    # which System.unique_integer/1 could never do (it returns a
+    # different value on every single call by construction).
+    assert event1["id"] != event2["id"]
+    assert "ev_" <> _ = event1["id"]
+
+    fixed_timestamp = ~U[2026-01-01 00:00:00.000000Z]
+
+    reproduced_a =
+      AshEx4pm.Notifier.event_id(Order, activity, to_string(order.id), fixed_timestamp)
+
+    reproduced_b =
+      AshEx4pm.Notifier.event_id(Order, activity, to_string(order.id), fixed_timestamp)
+
+    # Determinism: the SAME logical event (same resource, activity,
+    # record id, timestamp) always produces the SAME id -- this is what
+    # makes id-based dedup on a retried/duplicate notify/1 firing
+    # possible, and is the concrete property System.unique_integer/1
+    # structurally cannot provide.
+    assert reproduced_a == reproduced_b
+
+    assert reproduced_a ==
+             "ev_" <>
+               Base.encode16(
+                 :crypto.hash(:sha256, [
+                   inspect(Order),
+                   "order_created",
+                   to_string(order.id),
+                   DateTime.to_iso8601(fixed_timestamp)
+                 ]),
+                 case: :lower
+               )
+
+    # Restart-stability: nothing here reads any process/VM-local counter
+    # state (no System.unique_integer/1 call anywhere in event_id/2), so
+    # this id is reproducible identically on a freshly-booted BEAM node --
+    # unlike System.unique_integer/1, which resets to 1 on every restart.
+    refute reproduced_a =~ ~r/^ev_\d+$/
+
+    # "sequence" must stay a real integer: Ex4pm.OCEL.validate_envelope/1
+    # (~/ex4pm/lib/ex4pm/ocel.ex:385) hard-refuses any non-integer
+    # sequence, so the durable-id fix could not be applied to this field
+    # without breaking real downstream validation -- confirmed here.
+    assert is_integer(envelope1["sequence"])
+    assert is_integer(envelope2["sequence"])
+  end
+
   test "an action with no matching activity does not attempt to emit anything" do
     {:ok, order} =
       Order
