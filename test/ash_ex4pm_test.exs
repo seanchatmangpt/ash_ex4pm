@@ -323,4 +323,29 @@ defmodule AshEx4pmTest do
                AshEx4pm.Notifier.record_id(Widget, %{audit: "before_action"})
     end
   end
+
+  import ExUnit.CaptureLog
+
+  test "a real ingest_envelope refusal is logged, not silently swallowed" do
+    # Real refusal from ex4pm's real Ex4pm.Stream.Ingest.check_idempotency/2
+    # (ingest.ex:91-100) -- a negative sequence, no mocking involved.
+    envelope = %{
+      "schema" => "ash_ex4pm/1",
+      "producer" => %{"agent_id" => "ash_ex4pm"},
+      "sequence" => -1,
+      "objects" => %{},
+      "events" => []
+    }
+
+    assert {:error, %Ex4pm.Refusal{code: :invalid_sequence} = refusal} =
+             Ex4pm.Stream.Ingest.ingest_envelope(envelope)
+
+    log =
+      capture_log(fn ->
+        assert :ok = AshEx4pm.Notifier.log_refusal(refusal, Order, :create)
+      end)
+
+    assert log =~ "AshEx4pm.Notifier: ingest_envelope refused"
+    assert log =~ "invalid_sequence"
+  end
 end
