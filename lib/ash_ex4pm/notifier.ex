@@ -153,7 +153,9 @@ defmodule AshEx4pm.Notifier do
           "id" => event_id(notification.resource, activity, record_id, timestamp),
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.to_iso8601(timestamp),
-          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}],
+          "relationships" => [
+            %{"objectId" => record_id, "qualifier" => to_string(activity.qualifier || "primary")}
+          ],
           "attributes" => event_attributes(activity, notification.data)
         }
       ]

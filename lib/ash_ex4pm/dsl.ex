@@ -32,6 +32,7 @@ defmodule AshEx4pm.Activity do
     :resource,
     :object_type,
     attributes: [],
+    qualifier: "primary",
     __identifier__: nil,
     __spark_metadata__: nil
   ]
@@ -42,7 +43,8 @@ defmodule AshEx4pm.Activity do
           on: atom(),
           resource: module() | nil,
           object_type: atom() | nil,
-          attributes: [{atom(), attribute_type()}]
+          attributes: [{atom(), attribute_type()}],
+          qualifier: String.t() | atom()
         }
 end
 
@@ -134,6 +136,23 @@ defmodule AshEx4pm.Dsl do
             "reads these keys off the notification's data to populate the " <>
             "emitted event's real \"attributes\" map, rather than emitting " <>
             "whatever happens to be left over in the raw map."
+      ],
+      qualifier: [
+        type: {:or, [:string, :atom]},
+        required: false,
+        default: "primary",
+        doc:
+          "The OCEL 2.0 relationship qualifier attached to this activity's single " <>
+            "event-to-object relationship (AshEx4pm.Notifier.build_envelope/2's " <>
+            "\"relationships\" => [%{\"qualifier\" => ...}] entry). Defaults to " <>
+            "\"primary\" for backward compatibility with existing declarations. Set " <>
+            "it to a semantically meaningful role (e.g. :orderer, :payer, \"shipped_to\") " <>
+            "when the downstream ex4pm engine's e2o/o2o query predicates " <>
+            "(Ex4pm.Cognition.Ocpq) need to distinguish this relationship from other " <>
+            "activities' relationships on the same object type. Still scoped to " <>
+            "one qualifier per activity -- see this notifier's own moduledoc " <>
+            "\"Scope: single-object events only\" section for the multi-relationship " <>
+            "escape hatch."
       ]
     ]
   }
