@@ -146,6 +146,41 @@ defmodule AshEx4pmTest do
     assert {:error, %Ash.Error.Invalid{}} = result
   end
 
+  test "omitting `on` is refused at compile time, not silently defaulted to nil" do
+    # AshEx4pm.Activity's @enforce_keys [:name, :on] previously contradicted
+    # the schema's `on: [required: false]` and a doc claiming implicit
+    # per-action inference that was never implemented anywhere in
+    # AshEx4pm.Transformers.Persist. Now the schema requires `on:` for
+    # real (matching @enforce_keys and the corrected doc), so Spark's own
+    # entity-schema validation refuses this at compile time instead of
+    # silently building %AshEx4pm.Activity{on: nil, ...}.
+    assert_raise Spark.Error.DslError, ~r/on.*required|required.*on/i, fn ->
+      Code.compile_string("""
+      defmodule AshEx4pm.Test.MissingOnOrder do
+        use Ash.Resource,
+          domain: nil,
+          validate_domain_inclusion?: false,
+          data_layer: Ash.DataLayer.Ets,
+          notifiers: [AshEx4pm.Notifier],
+          extensions: [AshEx4pm]
+
+        ex4pm do
+          activity :order_created
+        end
+
+        actions do
+          defaults [:read, :destroy]
+          create :create
+        end
+
+        attributes do
+          uuid_primary_key :id
+        end
+      end
+      """)
+    end
+  end
+
   test "AshEx4pm.Changes.BrceGate admits an action with a capable actor" do
     result =
       AshEx4pm.Test.AdmittedResource

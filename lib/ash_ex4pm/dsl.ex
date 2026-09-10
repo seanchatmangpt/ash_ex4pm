@@ -41,11 +41,11 @@ defmodule AshEx4pm.Dsl do
       ],
       on: [
         type: :atom,
-        required: false,
+        required: true,
         doc:
-          "The Ash action name (e.g. :create) that triggers this activity. Required at " <>
-            "the resource level (implicit if omitted -- one activity per named action); " <>
-            "required explicitly at the domain level (no implicit resource to infer it from)."
+          "The Ash action name (e.g. :create) that triggers this activity. Always " <>
+            "required -- there is no implicit per-action inference; see " <>
+            "AshEx4pm.Activity's @enforce_keys, which mirrors this requirement."
       ],
       resource: [
         type: :atom,
