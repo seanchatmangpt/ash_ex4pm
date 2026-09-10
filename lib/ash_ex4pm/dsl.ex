@@ -16,12 +16,14 @@ defmodule AshEx4pm.Activity do
   vocabulary.
   """
   @enforce_keys [:name, :on]
-  defstruct [:name, :on, :resource, :__identifier__, :__spark_metadata__]
+  defstruct [:name, :on, :resource, attributes: [], __identifier__: nil, __spark_metadata__: nil]
 
+  @type attribute_type :: :string | :integer | :float | :boolean | :atom | :date | :datetime
   @type t :: %__MODULE__{
           name: atom(),
           on: atom(),
-          resource: module() | nil
+          resource: module() | nil,
+          attributes: [{atom(), attribute_type()}]
         }
 end
 
@@ -56,6 +58,23 @@ defmodule AshEx4pm.Dsl do
             "AshEx4pm.Transformers.Persist for resource-level declarations; required " <>
             "explicitly for domain-level declarations. Setting it explicitly at the " <>
             "resource level is a compile error (see AshEx4pm.Transformers.Persist)."
+      ],
+      attributes: [
+        type: :keyword_list,
+        required: false,
+        default: [],
+        doc:
+          "OCEL 2.0 event-type attribute schema for this activity, e.g. " <>
+            "`attributes: [carrier: :string, weight: :integer]` -- a keyword " <>
+            "list of `{name :: atom, type :: :string | :integer | :float | " <>
+            ":boolean | :atom | :date | :datetime}` pairs. Distinct from OCEL " <>
+            "object-type attributes: this declares what an *event* of this " <>
+            "activity always carries. AshEx4pm.Transformers.Persist validates " <>
+            "every declared type against this allowed set at compile time; " <>
+            "AshEx4pm.Notifier.build_envelope/2 reads these keys off the " <>
+            "notification's data to populate the emitted event's real " <>
+            "\"attributes\" map (coerced/validated per declared type), rather " <>
+            "than emitting whatever happens to be left over in the raw map."
       ]
     ]
   }
