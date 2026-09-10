@@ -39,7 +39,7 @@ defmodule AshEx4pmTest do
            end)
   end
 
-  test "build_envelope/2 emits only the primary object, even when the same action's real changeset carries a manage_relationship-managed related record" do
+  test "build_envelope/2 recovers the real, post-commit related record touched via manage_relationship from notification.data" do
     {:ok, order} =
       Order
       |> Ash.Changeset.for_create(:create, %{status: :pending})
@@ -50,7 +50,10 @@ defmodule AshEx4pmTest do
       |> Ash.Changeset.for_update(:add_line_item, %{line_item: %{sku: "sku-1"}})
 
     # Real update: manage_relationship really does create a second,
-    # independently-persisted LineItem record from this one action.
+    # independently-persisted LineItem record from this one action, and
+    # Ash writes that real, post-commit struct back onto `updated_order`
+    # via Map.put(record, :line_items, new_value) -- not raw pre-commit
+    # input.
     {:ok, updated_order} = Ash.update(changeset)
 
     real_line_items =
@@ -59,6 +62,13 @@ defmodule AshEx4pmTest do
       |> Ash.read!()
 
     assert length(real_line_items) == 1
+    [real_line_item] = real_line_items
+
+    # Confirms the premise this fix relies on: the record Ash actually
+    # returns from the update already carries the real, persisted
+    # LineItem struct (not %Ash.NotLoaded{}, not raw changeset input).
+    assert [%AshEx4pm.Test.LineItem{id: loaded_id}] = updated_order.line_items
+    assert loaded_id == real_line_item.id
 
     activity = %AshEx4pm.Activity{name: :order_created, on: :add_line_item, resource: Order}
 
@@ -71,19 +81,63 @@ defmodule AshEx4pmTest do
 
     envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
 
-    # Documented, deliberate scope (see AshEx4pm.Notifier moduledoc): even
-    # though this real action really did touch two separate resource
-    # records (the order and the newly-created line item), the emitted
-    # envelope carries exactly one object/relationship -- the order's own
-    # record_id. If this ever regresses to including the related
-    # line-item id without a corresponding design decision, this
-    # assertion catches it.
-    assert map_size(envelope["objects"]) == 1
+    # The primary object (the order) is still present.
     assert Map.has_key?(envelope["objects"], to_string(updated_order.id))
 
+    # The real, post-commit related LineItem is now ALSO an object, with
+    # its own real, resolved primary key -- recovered from
+    # notification.data.line_items, not from changeset.relationships.
+    line_item_id = to_string(real_line_item.id)
+    assert Map.has_key?(envelope["objects"], line_item_id)
+    assert envelope["objects"][line_item_id]["type"] == "LineItem"
+
     [event] = envelope["events"]
-    assert [%{"objectId" => object_id, "qualifier" => "primary"}] = event["relationships"]
+
+    assert %{"objectId" => object_id, "qualifier" => "primary"} =
+             Enum.find(event["relationships"], &(&1["qualifier"] == "primary"))
+
     assert object_id == to_string(updated_order.id)
+
+    assert %{"objectId" => related_object_id, "qualifier" => "line_items"} =
+             Enum.find(event["relationships"], &(&1["qualifier"] == "line_items"))
+
+    assert related_object_id == line_item_id
+
+    # ex4pm's real, downstream validator/normalizer must actually accept
+    # this shape -- not just be self-consistent within ash_ex4pm. Every
+    # object_id referenced by an event relationship must exist in
+    # "objects", or Ex4pm.OCEL.normalize/1 refuses with
+    # :unknown_object_reference.
+    assert {:ok, validated} = Ex4pm.OCEL.validate_envelope(envelope)
+    assert {:ok, %Ex4pm.EventLog{}} = Ex4pm.OCEL.normalize(envelope)
+    assert map_size(validated.objects) == 2
+  end
+
+  test "build_envelope/2 skips a relationship never touched on this action (stays %Ash.NotLoaded{})" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    # A plain :ship update never touches :line_items -- it stays
+    # %Ash.NotLoaded{} on the returned record, and must never be guessed
+    # at or lazily loaded by the notifier.
+    assert match?(%Ash.NotLoaded{}, order.line_items)
+
+    activity = %AshEx4pm.Activity{name: :order_shipped, on: :ship, resource: Order}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :ship},
+      data: order,
+      changeset: Ash.Changeset.for_update(order, :ship, %{})
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+    assert map_size(envelope["objects"]) == 1
+    [event] = envelope["events"]
+    assert [%{"qualifier" => "primary"}] = event["relationships"]
   end
 
   test "an action with no matching activity does not attempt to emit anything" do

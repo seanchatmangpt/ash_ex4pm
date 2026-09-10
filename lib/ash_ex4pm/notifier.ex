@@ -27,30 +27,51 @@ defmodule AshEx4pm.Notifier do
   DIFFERENT real path (batch/offline normalization for
   discover/conform), not what the real-time ingest function consumes.
 
-  ## Scope: single-object events only
+  ## Scope: the primary object, plus any relationship already loaded on
+  ## `notification.data`
 
-  `build_envelope/2` always emits exactly one OCEL object -- the acting
-  resource's own `record_id` -- and one relationship entry
-  (`qualifier: "primary"` pointing at that same id). This is deliberate,
-  not an oversight: a single `Ash.Notifier.Notification` here corresponds
-  to a single resource/changeset, and `notify/1` has no reliable way to
-  recover the *actual persisted* identities of records touched via
-  `Ash.Changeset.manage_relationship/3` from that one notification alone
-  (`changeset.relationships` holds the raw pre-commit input passed to
-  `manage_relationship`, not resolved post-commit related-record ids, and
-  a single Ash action with `manage_relationship` can already produce
-  several independent `resource_notifications` -- one per affected
-  resource -- rather than one combined notification carrying the full
-  relationship set).
+  `build_envelope/2` always emits the acting resource's own `record_id`
+  as the primary OCEL object (`qualifier: "primary"`). It additionally
+  walks `Ash.Resource.Info.relationships/1` for the resource and, for
+  each relationship whose value on `notification.data` is *actually
+  loaded* (not `%Ash.NotLoaded{}`), emits the related struct(s) as
+  additional OCEL objects plus event relationships qualified by the
+  relationship name.
 
-  If an activity is genuinely relational (e.g. an order-to-line-item
-  append that should be modeled as one multi-object OCEL event), this
-  notifier is the wrong mechanism for it. Instead, add a resource-level
-  `Ash.Resource.Change` that builds and returns a manual
-  `%Ash.Notifier.Notification{}` carrying the full object/relationship
-  set for that action (see `action_input.ex`'s manual-notification
-  pattern) rather than relying on this notifier's one-object-per-action
-  default.
+  This is real, not speculative, because of what `notification.data`
+  actually is: for `create`/`update`/`destroy`, Ash's own
+  `Ash.Actions.ManagedRelationships.manage_relationships/4`
+  (`deps/ash/lib/ash/actions/managed_relationships.ex:710,807`) writes
+  the REAL, POST-COMMIT related struct(s) -- not raw pre-commit input --
+  back onto the record via `Map.put(record, relationship.name,
+  new_value)`, and that same record is exactly what flows through
+  `Ash.Actions.Update.Update`/`Create.Create`/`Destroy.Destroy`'s
+  `manage_relationships/4` into
+  `Ash.Actions.Helpers.resource_notification/3`'s `data: result`
+  (`deps/ash/lib/ash/actions/helpers.ex:475-484`). So
+  `notification.data.<relationship_name>` genuinely holds real,
+  persisted related records with real primary keys whenever
+  `manage_relationship` (or an explicit `load:`) touched that
+  relationship on this same action -- it does NOT require reading
+  `changeset.relationships` (which is raw pre-commit input, correctly
+  never used here).
+
+  A relationship that this action did not touch stays `%Ash.NotLoaded{}`
+  on `notification.data` and is correctly skipped -- this notifier never
+  guesses at, or lazily loads, relationships nothing on this changeset
+  actually populated. A loaded-but-empty `has_many`/`many_to_many` (`[]`)
+  is also skipped (nothing relational actually happened), while a
+  loaded-but-`nil` `belongs_to`/`has_one` is skipped for the same reason.
+
+  What this does NOT do: correlate relationship changes ACROSS sibling
+  resources' own separate `resource_notifications` (Ash may fire several
+  independent notifications for one action, one per affected resource) --
+  that remains a genuinely separate problem from recovering identities
+  already sitting on THIS notification's own `data`, and is out of scope
+  here. For that cross-resource case, or for attaching real per-object
+  `"type"`/`"attributes"` to a related object this walk cannot infer, use
+  a resource-level `Ash.Resource.Change` that builds a manual
+  `%Ash.Notifier.Notification{}` (see `action_input.ex`'s pattern).
   """
   use Ash.Notifier
   require Logger
@@ -106,16 +127,28 @@ defmodule AshEx4pm.Notifier do
   end
 
   # Public (but @doc false) so tests can inspect the real envelope shape
-  # directly -- deliberately single-object/single-relationship, see the
-  # moduledoc's "Scope: single-object events only" section for why this
-  # notifier does not attempt to recover related-record identities from
-  # `manage_relationship` calls on the same changeset.
+  # directly. See the moduledoc's "Scope: the primary object, plus any
+  # relationship already loaded on `notification.data`" section for what
+  # this does and does not attempt to recover.
   @doc false
   def build_envelope(activity, notification) do
     provenance_source =
       AshEx4pm.Info.compiled(notification.resource)[:provenance_source] || :ash_ex4pm
 
     record_id = record_id(notification.resource, notification.data)
+
+    related =
+      relationship_objects(notification.resource, notification.data)
+
+    objects =
+      Map.new(
+        [{record_id, resource_type_name(notification.resource), "primary"} | related],
+        fn {id, type, _qualifier} -> {id, %{"id" => id, "type" => type}} end
+      )
+
+    relationships =
+      [%{"objectId" => record_id, "qualifier" => "primary"}] ++
+        Enum.map(related, fn {id, _type, qualifier} -> %{"objectId" => id, "qualifier" => qualifier} end)
 
     %{
       "schema" => "ash_ex4pm/1",
@@ -125,21 +158,58 @@ defmodule AshEx4pm.Notifier do
         "resource" => inspect(notification.resource)
       },
       "sequence" => System.unique_integer([:positive]),
-      "objects" => %{
-        record_id => %{
-          "id" => record_id,
-          "type" => resource_type_name(notification.resource)
-        }
-      },
+      "objects" => objects,
       "events" => [
         %{
           "id" => "ev_#{System.unique_integer([:positive])}",
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}]
+          "relationships" => relationships
         }
       ]
     }
+  end
+
+  # Walks the resource's real relationships and, for each one that is
+  # actually loaded on `data` (i.e. touched by `manage_relationship` or
+  # an explicit `load:` on this same action -- never %Ash.NotLoaded{}),
+  # extracts the real persisted related struct(s) as extra OCEL objects.
+  # Returns a list of {object_id, type, qualifier} triples so the caller
+  # can build both the "objects" map and the event's "relationships"
+  # list from the same real, resolved data.
+  defp relationship_objects(resource, data) when is_atom(resource) and is_struct(data) do
+    resource
+    |> relationships()
+    |> Enum.flat_map(fn relationship ->
+      case Map.get(data, relationship.name) do
+        %Ash.NotLoaded{} ->
+          []
+
+        nil ->
+          []
+
+        [] ->
+          []
+
+        value ->
+          value
+          |> List.wrap()
+          |> Enum.filter(&is_struct/1)
+          |> Enum.map(fn related_struct ->
+            {record_id(relationship.destination, related_struct),
+             resource_type_name(relationship.destination), to_string(relationship.name)}
+          end)
+      end
+    end)
+    |> Enum.uniq_by(fn {id, _type, qualifier} -> {id, qualifier} end)
+  end
+
+  defp relationship_objects(_resource, _data), do: []
+
+  defp relationships(resource) do
+    Ash.Resource.Info.relationships(resource)
+  rescue
+    _ -> []
   end
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
