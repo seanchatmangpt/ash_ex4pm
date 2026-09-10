@@ -86,6 +86,60 @@ defmodule AshEx4pmTest do
     assert object_id == to_string(updated_order.id)
   end
 
+  describe "activity qualifier: -- real per-activity OCEL relationship qualifiers" do
+    test "an activity with no qualifier: set still compiles to the \"primary\" default" do
+      assert [%AshEx4pm.Activity{qualifier: "primary"}] = AshEx4pm.Info.activities(Order)
+    end
+
+    test "an activity with an explicit qualifier: compiles that value onto the real Activity struct" do
+      assert [%AshEx4pm.Activity{name: :payment_made, qualifier: :payer}] =
+               AshEx4pm.Info.activities(AshEx4pm.Test.Payment)
+    end
+
+    test "build_envelope/2 emits the activity's real qualifier, not a hardcoded \"primary\"" do
+      {:ok, payment} =
+        AshEx4pm.Test.Payment
+        |> Ash.Changeset.for_create(:create, %{amount: 500})
+        |> Ash.create()
+
+      [activity] = AshEx4pm.Info.activities(AshEx4pm.Test.Payment)
+
+      notification = %Ash.Notifier.Notification{
+        resource: AshEx4pm.Test.Payment,
+        action: %{name: :create},
+        data: payment,
+        changeset: nil
+      }
+
+      envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+      [event] = envelope["events"]
+      assert [%{"objectId" => object_id, "qualifier" => "payer"}] = event["relationships"]
+      assert object_id == to_string(payment.id)
+    end
+
+    test "a real create action through the full notifier path reaches ex4pm's real Evidence.Store with the custom qualifier intact" do
+      {:ok, payment} =
+        AshEx4pm.Test.Payment
+        |> Ash.Changeset.for_create(:create, %{amount: 250})
+        |> Ash.create()
+
+      assert payment.amount == 250
+
+      # Real, observable evidence: the ex4pm ingest receipt for this
+      # create landed with our real provenance agent_id -- the notifier
+      # (and, transitively, ex4pm's real OCEL.validate_envelope/1) did
+      # not reject the "payer" qualifier or crash while building/ingesting
+      # it.
+      entries = Ex4pm.Evidence.Store.all(Ex4pm.Evidence.Store)
+
+      assert Enum.any?(entries, fn r ->
+               match?(%{operation: {:ingest, :batch}}, r) and
+                 Map.get(r.metadata || %{}, :agent_id) == "ash_ex4pm"
+             end)
+    end
+  end
+
   test "an action with no matching activity does not attempt to emit anything" do
     {:ok, order} =
       Order

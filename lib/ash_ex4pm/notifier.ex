@@ -136,7 +136,9 @@ defmodule AshEx4pm.Notifier do
           "id" => "ev_#{System.unique_integer([:positive])}",
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}]
+          "relationships" => [
+            %{"objectId" => record_id, "qualifier" => to_string(activity.qualifier || "primary")}
+          ]
         }
       ]
     }

@@ -16,12 +16,20 @@ defmodule AshEx4pm.Activity do
   vocabulary.
   """
   @enforce_keys [:name, :on]
-  defstruct [:name, :on, :resource, :__identifier__, :__spark_metadata__]
+  defstruct [
+    :name,
+    :on,
+    :resource,
+    qualifier: "primary",
+    __identifier__: nil,
+    __spark_metadata__: nil
+  ]
 
   @type t :: %__MODULE__{
           name: atom(),
           on: atom(),
-          resource: module() | nil
+          resource: module() | nil,
+          qualifier: String.t() | atom()
         }
 end
 
@@ -56,6 +64,23 @@ defmodule AshEx4pm.Dsl do
             "AshEx4pm.Transformers.Persist for resource-level declarations; required " <>
             "explicitly for domain-level declarations. Setting it explicitly at the " <>
             "resource level is a compile error (see AshEx4pm.Transformers.Persist)."
+      ],
+      qualifier: [
+        type: {:or, [:string, :atom]},
+        required: false,
+        default: "primary",
+        doc:
+          "The OCEL 2.0 relationship qualifier attached to this activity's single " <>
+            "event-to-object relationship (AshEx4pm.Notifier.build_envelope/2's " <>
+            "\"relationships\" => [%{\"qualifier\" => ...}] entry). Defaults to " <>
+            "\"primary\" for backward compatibility with existing declarations. Set " <>
+            "it to a semantically meaningful role (e.g. :orderer, :payer, \"shipped_to\") " <>
+            "when the downstream ex4pm engine's e2o/o2o query predicates " <>
+            "(Ex4pm.Cognition.Ocpq) need to distinguish this relationship from other " <>
+            "activities' relationships on the same object type. Still scoped to " <>
+            "one qualifier per activity -- see this notifier's own moduledoc " <>
+            "\"Scope: single-object events only\" section for the multi-relationship " <>
+            "escape hatch."
       ]
     ]
   }

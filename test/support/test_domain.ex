@@ -71,6 +71,37 @@ defmodule AshEx4pm.Test.Widget do
   end
 end
 
+defmodule AshEx4pm.Test.Payment do
+  @moduledoc """
+  Real Ash resource whose `activity` declares an explicit `qualifier:` --
+  proves the DSL can emit a semantically meaningful qualifier other than
+  the hardcoded "primary" default.
+  """
+  use Ash.Resource,
+    domain: AshEx4pm.Test.Domain,
+    data_layer: Ash.DataLayer.Ets,
+    notifiers: [AshEx4pm.Notifier],
+    extensions: [AshEx4pm]
+
+  ex4pm do
+    activity(:payment_made, on: :create, qualifier: :payer)
+  end
+
+  actions do
+    defaults([:read, :destroy])
+
+    create :create do
+      primary?(true)
+      accept([:amount])
+    end
+  end
+
+  attributes do
+    uuid_primary_key(:id)
+    attribute(:amount, :integer, public?: true)
+  end
+end
+
 defmodule AshEx4pm.Test.LineItem do
   @moduledoc "Real related Ash resource -- appended via manage_relationship on Order."
   use Ash.Resource,
@@ -103,6 +134,7 @@ defmodule AshEx4pm.Test.Domain do
   resources do
     resource(AshEx4pm.Test.Order)
     resource(AshEx4pm.Test.Widget)
+    resource(AshEx4pm.Test.Payment)
     resource(AshEx4pm.Test.LineItem)
   end
 end
