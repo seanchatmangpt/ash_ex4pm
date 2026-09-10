@@ -208,6 +208,46 @@ defmodule AshEx4pm.Test.LineItem do
   end
 end
 
+defmodule AshEx4pm.Test.Account do
+  @moduledoc """
+  Real Ash resource with `track_attribute_changes?: true` -- exercises
+  `AshEx4pm.Notifier.attribute_change_attributes/2`'s opt-in,
+  `:update`-only, public-attribute-filtered automatic capture of raw
+  attribute changes. `internal_note` is deliberately private
+  (`public?: false`) to prove the public-attribute security floor holds
+  even when automatic capture is enabled.
+  """
+  use Ash.Resource,
+    domain: AshEx4pm.Test.Domain,
+    data_layer: Ash.DataLayer.Ets,
+    notifiers: [AshEx4pm.Notifier],
+    extensions: [AshEx4pm]
+
+  ex4pm do
+    activity(:account_updated, on: :update, track_attribute_changes?: true)
+  end
+
+  actions do
+    defaults([:read, :destroy])
+
+    create :create do
+      primary?(true)
+      accept([:balance, :internal_note])
+    end
+
+    update :update do
+      primary?(true)
+      accept([:balance, :internal_note])
+    end
+  end
+
+  attributes do
+    uuid_primary_key(:id)
+    attribute(:balance, :integer, default: 0, public?: true)
+    attribute(:internal_note, :string, default: "", public?: false)
+  end
+end
+
 defmodule AshEx4pm.Test.Domain do
   @moduledoc false
   use Ash.Domain, validate_config_inclusion?: false
@@ -219,5 +259,6 @@ defmodule AshEx4pm.Test.Domain do
     resource(AshEx4pm.Test.Gadget)
     resource(AshEx4pm.Test.Payment)
     resource(AshEx4pm.Test.LineItem)
+    resource(AshEx4pm.Test.Account)
   end
 end

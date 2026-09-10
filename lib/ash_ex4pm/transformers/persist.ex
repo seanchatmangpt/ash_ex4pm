@@ -46,7 +46,8 @@ defmodule AshEx4pm.Transformers.Persist do
 
     with :ok <- validate_context(activities, module, resource_dsl?),
          :ok <- validate_object_types(activities, object_types_by_name, module),
-         :ok <- validate_attribute_types(activities, module) do
+         :ok <- validate_attribute_types(activities, module),
+         :ok <- validate_object_type_attribute_types(object_types, module) do
       normalized =
         Enum.map(activities, fn a ->
           if resource_dsl? and is_nil(a.resource), do: %{a | resource: module}, else: a
@@ -58,8 +59,7 @@ defmodule AshEx4pm.Transformers.Persist do
       compiled = %{
         activities: normalized,
         object_types: object_types_by_name,
-        provenance_source: provenance_source,
-        context: if(resource_dsl?, do: :resource, else: :domain)
+        provenance_source: provenance_source
       }
 
       dsl_state
@@ -190,6 +190,52 @@ defmodule AshEx4pm.Transformers.Persist do
                 "activity #{inspect(activity.name)} declares attribute " <>
                   "#{inspect(attr_name)} with unsupported type #{inspect(bad_type)} -- " <>
                   "must be one of #{inspect(@allowed_attribute_types)}."
+            )}}
+      end
+    end)
+  end
+
+  # `object_type ..., attributes: [...]` entries declare OCEL 2.0 *object*
+  # attribute types, a distinct, wider set than @allowed_attribute_types
+  # (event-attribute types): object attributes additionally allow
+  # `:decimal` (see AshEx4pm.ObjectType's moduledoc, and
+  # AshEx4pm.Test.Invoice's `total_amount: :decimal` fixture), which
+  # `@allowed_attribute_types` deliberately excludes for event attributes.
+  # Previously nothing validated this list at all -- a typo'd or
+  # unsupported object-type attribute type compiled silently and was only
+  # ever caught (or not) by `AshEx4pm.Notifier.declared_attributes/2`'s
+  # raw, uncoerced Map.fetch pass-through at emit time, contrary to
+  # AshEx4pm.ObjectType's moduledoc claim that this transformer checks it
+  # at compile time.
+  @allowed_object_type_attribute_types [
+    :string,
+    :integer,
+    :float,
+    :decimal,
+    :boolean,
+    :atom,
+    :date,
+    :datetime
+  ]
+
+  defp validate_object_type_attribute_types(object_types, module) do
+    Enum.reduce_while(object_types, :ok, fn object_type, :ok ->
+      case Enum.find(object_type.attributes, fn {_name, type} ->
+             type not in @allowed_object_type_attribute_types
+           end) do
+        nil ->
+          {:cont, :ok}
+
+        {attr_name, bad_type} ->
+          {:halt,
+           {:error,
+            Spark.Error.DslError.exception(
+              module: module,
+              path: [:ex4pm, object_type.name, :attributes, attr_name],
+              message:
+                "object_type #{inspect(object_type.name)} declares attribute " <>
+                  "#{inspect(attr_name)} with unsupported type #{inspect(bad_type)} -- " <>
+                  "must be one of #{inspect(@allowed_object_type_attribute_types)}."
             )}}
       end
     end)

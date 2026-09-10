@@ -96,9 +96,16 @@ defmodule AshEx4pm.ObjectType do
   (`~/ex4pm/lib/ex4pm/ocel.ex:366-417`) does not itself enforce an
   attribute-type schema on ingest (confirmed by reading it: an object's
   "attributes" map is opaque, passed through as-is), so this type
-  declaration is ash_ex4pm's own contract, checked at compile time
-  against a resource's own Ash attributes by
-  `AshEx4pm.Transformers.Persist`, not re-validated downstream by ex4pm.
+  declaration is ash_ex4pm's own contract. `AshEx4pm.Transformers.Persist`
+  checks each declared attribute's *type* is one of the allowed OCEL
+  object-attribute types at compile time (an unsupported type, e.g. a
+  typo'd `:strnig`, is refused at build time, not silently accepted) --
+  it does NOT cross-check declared attribute names/types against the
+  resource's own real Ash attributes (a declared object-type attribute
+  with no matching Ash attribute on the resource still compiles; at emit
+  time `AshEx4pm.Notifier.declared_attributes/2` does an uncoerced,
+  untyped `Map.fetch` pass-through and simply omits whatever isn't
+  present). Not re-validated downstream by ex4pm either way.
   """
   @enforce_keys [:name, :attributes]
   defstruct [:name, :attributes, :__identifier__, :__spark_metadata__]

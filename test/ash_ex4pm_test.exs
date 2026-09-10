@@ -1039,4 +1039,128 @@ defmodule AshEx4pmTest do
       end
     end
   end
+
+  describe "track_attribute_changes? -- real opt-in automatic attribute-change capture" do
+    alias AshEx4pm.Test.Account
+
+    test "compiles track_attribute_changes?: true onto the real Activity struct" do
+      assert [%AshEx4pm.Activity{name: :account_updated, track_attribute_changes?: true}] =
+               AshEx4pm.Info.activities(Account)
+    end
+
+    test "a real :update action's changed public attribute is captured into the " <>
+           "emitted event's attributes map even though it was never declared via " <>
+           "attributes:" do
+      {:ok, account} =
+        Account
+        |> Ash.Changeset.for_create(:create, %{balance: 100, internal_note: "opening"})
+        |> Ash.create()
+
+      {:ok, updated} =
+        account
+        |> Ash.Changeset.for_update(:update, %{balance: 250})
+        |> Ash.update()
+
+      activity = %AshEx4pm.Activity{
+        name: :account_updated,
+        on: :update,
+        resource: Account,
+        track_attribute_changes?: true
+      }
+
+      notification = %Ash.Notifier.Notification{
+        resource: Account,
+        action: %{type: :update, name: :update},
+        data: updated,
+        changeset: %Ash.Changeset{attributes: %{balance: 250}, resource: Account}
+      }
+
+      assert AshEx4pm.Notifier.event_attributes(activity, notification) == %{
+               "balance" => 250
+             }
+    end
+
+    test "a private attribute change (internal_note, public?: false) is never " <>
+           "leaked into the automatically-captured attributes map" do
+      activity = %AshEx4pm.Activity{
+        name: :account_updated,
+        on: :update,
+        resource: Account,
+        track_attribute_changes?: true
+      }
+
+      notification = %Ash.Notifier.Notification{
+        resource: Account,
+        action: %{type: :update, name: :update},
+        data: %Account{balance: 5, internal_note: "secret"},
+        changeset: %Ash.Changeset{
+          attributes: %{balance: 5, internal_note: "secret"},
+          resource: Account
+        }
+      }
+
+      attrs = AshEx4pm.Notifier.event_attributes(activity, notification)
+      assert attrs["balance"] == 5
+      refute Map.has_key?(attrs, "internal_note")
+    end
+
+    test "a :create action never triggers automatic capture, even with " <>
+           "track_attribute_changes?: true (there is no prior value to diff " <>
+           "against)" do
+      activity = %AshEx4pm.Activity{
+        name: :account_updated,
+        on: :update,
+        resource: Account,
+        track_attribute_changes?: true
+      }
+
+      notification = %Ash.Notifier.Notification{
+        resource: Account,
+        action: %{type: :create, name: :create},
+        data: %Account{balance: 5, internal_note: ""},
+        changeset: %Ash.Changeset{attributes: %{balance: 5}, resource: Account}
+      }
+
+      assert AshEx4pm.Notifier.event_attributes(activity, notification) == %{}
+    end
+  end
+
+  describe "object_type attribute types -- validated at compile time" do
+    test "an object_type with an unsupported declared attribute type is refused " <>
+           "at compile time" do
+      assert_raise Spark.Error.DslError, ~r/unsupported type :strnig/, fn ->
+        Code.compile_string("""
+        defmodule AshEx4pm.Test.BadObjectTypeAttribute do
+          use Ash.Resource,
+            domain: nil,
+            validate_domain_inclusion?: false,
+            data_layer: Ash.DataLayer.Ets,
+            notifiers: [AshEx4pm.Notifier],
+            extensions: [AshEx4pm]
+
+          ex4pm do
+            object_type(:thing, attributes: [carrier: :strnig])
+            activity :thing_created, on: :create, object_type: :thing
+          end
+
+          actions do
+            defaults [:read, :destroy]
+            create :create
+          end
+
+          attributes do
+            uuid_primary_key :id
+          end
+        end
+        """)
+      end
+    end
+
+    test "an object_type declaring :decimal (a type not allowed for activity " <>
+           "event attributes) is accepted -- object-type attributes have a wider " <>
+           "allowed type set than event attributes" do
+      assert %{object_types: object_types} = AshEx4pm.Info.compiled(AshEx4pm.Test.Invoice)
+      assert object_types[:invoice].attributes[:total_amount] == :decimal
+    end
+  end
 end
