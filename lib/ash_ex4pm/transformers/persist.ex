@@ -39,9 +39,13 @@ defmodule AshEx4pm.Transformers.Persist do
     module = Transformer.get_persisted(dsl_state, :module)
     resource_dsl? = resource_dsl?(module)
 
-    activities = Transformer.get_entities(dsl_state, [:ex4pm])
+    entities = Transformer.get_entities(dsl_state, [:ex4pm])
+    {activities, object_types} = Enum.split_with(entities, &match?(%AshEx4pm.Activity{}, &1))
 
-    with :ok <- validate_context(activities, module, resource_dsl?) do
+    object_types_by_name = Map.new(object_types, &{&1.name, &1})
+
+    with :ok <- validate_context(activities, module, resource_dsl?),
+         :ok <- validate_object_types(activities, object_types_by_name, module) do
       normalized =
         Enum.map(activities, fn a ->
           if resource_dsl? and is_nil(a.resource), do: %{a | resource: module}, else: a
@@ -52,11 +56,44 @@ defmodule AshEx4pm.Transformers.Persist do
 
       compiled = %{
         activities: normalized,
+        object_types: object_types_by_name,
         provenance_source: provenance_source,
         context: if(resource_dsl?, do: :resource, else: :domain)
       }
 
       {:ok, Transformer.persist(dsl_state, :ash_ex4pm_compiled, compiled)}
+    end
+  end
+
+  # Every `activity` that explicitly declares `object_type:` must name a
+  # real, declared `object_type` entity in the same section -- this is the
+  # real OCEL 2.0 object-type-schema check the extension previously had no
+  # concept of at all (object types were purely emergent from
+  # `AshEx4pm.Notifier.resource_type_name/1`'s module-name derivation).
+  # Activities with no `object_type:` set are left alone -- that stays a
+  # real, disclosed back-compat fallback (see AshEx4pm.Activity's
+  # moduledoc), not silently promoted into a required declaration, so
+  # existing resources that never declared object types keep compiling.
+  defp validate_object_types(activities, object_types_by_name, module) do
+    activities
+    |> Enum.find(
+      &(not is_nil(&1.object_type) and not Map.has_key?(object_types_by_name, &1.object_type))
+    )
+    |> case do
+      nil ->
+        :ok
+
+      bad ->
+        {:error,
+         Spark.Error.DslError.exception(
+           module: module,
+           path: [:ex4pm, bad.name, :object_type],
+           message:
+             "`activity #{inspect(bad.name)}` declares `object_type: #{inspect(bad.object_type)}`, " <>
+               "which does not resolve to any declared `object_type #{inspect(bad.object_type)}, " <>
+               "attributes: [...]` entity in this section. Declared object types: " <>
+               "#{inspect(Map.keys(object_types_by_name))}."
+         )}
     end
   end
 

@@ -449,4 +449,166 @@ defmodule AshEx4pmTest do
     # be exactly 1 (both collapsing to the same resource+operation hash).
     assert length(admitted_hashes) > 1
   end
+
+  describe "object_type -- real, declared OCEL 2.0 object-type schema" do
+    alias AshEx4pm.Test.Invoice
+
+    test "a declared object_type is compiled with its real typed attribute list" do
+      assert %{object_types: object_types} = AshEx4pm.Info.compiled(Invoice)
+
+      assert %AshEx4pm.ObjectType{name: :invoice, attributes: attributes} =
+               object_types[:invoice]
+
+      assert attributes[:total_amount] == :decimal
+      assert attributes[:currency] == :string
+    end
+
+    test "an activity with no object_type: still compiles and falls back to the " <>
+           "historical module-name-derived type, unchanged" do
+      assert [%AshEx4pm.Activity{name: :order_created, object_type: nil}] =
+               AshEx4pm.Info.activities(AshEx4pm.Test.Order)
+    end
+
+    test "build_envelope/2 uses the declared object type's own name as the OCEL " <>
+           "\"type\", not the resource module name, when object_type: is set" do
+      {:ok, invoice} =
+        Invoice
+        |> Ash.Changeset.for_create(:create, %{
+          total_amount: Decimal.new("42.50"),
+          currency: "USD"
+        })
+        |> Ash.create()
+
+      activity = %AshEx4pm.Activity{
+        name: :invoice_created,
+        on: :create,
+        resource: Invoice,
+        object_type: :invoice
+      }
+
+      notification = %Ash.Notifier.Notification{
+        resource: Invoice,
+        action: %{name: :create},
+        data: invoice
+      }
+
+      envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+      object = envelope["objects"][to_string(invoice.id)]
+
+      # "invoice" (the declared object_type name), never "Invoice" (what
+      # resource_type_name/1's Module.split |> List.last would have
+      # produced) -- proves the declared schema, not the module name, now
+      # drives the emitted OCEL type.
+      assert object["type"] == "invoice"
+    end
+
+    test "build_envelope/2 populates the object's real declared attributes from " <>
+           "the resource's own persisted data" do
+      {:ok, invoice} =
+        Invoice
+        |> Ash.Changeset.for_create(:create, %{
+          total_amount: Decimal.new("42.50"),
+          currency: "USD"
+        })
+        |> Ash.create()
+
+      activity = %AshEx4pm.Activity{
+        name: :invoice_created,
+        on: :create,
+        resource: Invoice,
+        object_type: :invoice
+      }
+
+      notification = %Ash.Notifier.Notification{
+        resource: Invoice,
+        action: %{name: :create},
+        data: invoice
+      }
+
+      envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+      object = envelope["objects"][to_string(invoice.id)]
+
+      assert object["attributes"]["total_amount"] == Decimal.new("42.50")
+      assert object["attributes"]["currency"] == "USD"
+    end
+
+    test "the real emitted envelope reaches ex4pm's real Ex4pm.OCEL.validate_envelope/1 " <>
+           "unrefused when object_type: is declared" do
+      {:ok, invoice} =
+        Invoice
+        |> Ash.Changeset.for_create(:create, %{
+          total_amount: Decimal.new("10.00"),
+          currency: "EUR"
+        })
+        |> Ash.create()
+
+      activity = %AshEx4pm.Activity{
+        name: :invoice_created,
+        on: :create,
+        resource: Invoice,
+        object_type: :invoice
+      }
+
+      notification = %Ash.Notifier.Notification{
+        resource: Invoice,
+        action: %{name: :create},
+        data: invoice
+      }
+
+      envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+      # Real call into ex4pm's own, unmocked validator -- confirms this
+      # envelope shape (declared object type name + nested "attributes"
+      # map) is actually accepted downstream, not just self-consistent
+      # within ash_ex4pm.
+      assert {:ok, normalized} = Ex4pm.OCEL.validate_envelope(envelope)
+      assert normalized.schema == "ash_ex4pm/1"
+    end
+
+    test "a real create action on a resource with a declared object_type reaches " <>
+           "ex4pm's real Evidence.Store with the declared type name" do
+      {:ok, invoice} =
+        Invoice
+        |> Ash.Changeset.for_create(:create, %{total_amount: Decimal.new("5.00"), currency: "GBP"})
+        |> Ash.create()
+
+      entries = Ex4pm.Evidence.Store.all(Ex4pm.Evidence.Store)
+
+      assert Enum.any?(entries, fn r ->
+               match?(%{operation: {:ingest, :batch}}, r) and
+                 Map.get(r.metadata || %{}, :agent_id) == "ash_ex4pm"
+             end)
+
+      assert invoice.currency == "GBP"
+    end
+
+    test "an activity's object_type: that does not resolve to a declared " <>
+           "object_type is refused at compile time, not silently accepted" do
+      assert_raise Spark.Error.DslError, ~r/does not resolve to any declared `object_type/, fn ->
+        Code.compile_string("""
+        defmodule AshEx4pm.Test.UndeclaredObjectTypeOrder do
+          use Ash.Resource,
+            domain: nil,
+            validate_domain_inclusion?: false,
+            data_layer: Ash.DataLayer.Ets,
+            notifiers: [AshEx4pm.Notifier],
+            extensions: [AshEx4pm]
+
+          ex4pm do
+            activity :order_created, on: :create, object_type: :nonexistent_type
+          end
+
+          actions do
+            defaults [:read, :destroy]
+            create :create
+          end
+
+          attributes do
+            uuid_primary_key :id
+          end
+        end
+        """)
+      end
+    end
+  end
 end

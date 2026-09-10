@@ -71,6 +71,40 @@ defmodule AshEx4pm.Test.Widget do
   end
 end
 
+defmodule AshEx4pm.Test.Invoice do
+  @moduledoc """
+  Real Ash resource declaring an explicit `object_type` -- proves the OCEL
+  2.0 object-type schema (name + typed attributes) is a real, compiled
+  DSL construct, not just `AshEx4pm.Notifier.resource_type_name/1`'s
+  module-name derivation.
+  """
+  use Ash.Resource,
+    domain: AshEx4pm.Test.Domain,
+    data_layer: Ash.DataLayer.Ets,
+    notifiers: [AshEx4pm.Notifier],
+    extensions: [AshEx4pm]
+
+  ex4pm do
+    object_type(:invoice, attributes: [total_amount: :decimal, currency: :string])
+    activity(:invoice_created, on: :create, object_type: :invoice)
+  end
+
+  actions do
+    defaults([:read, :destroy])
+
+    create :create do
+      primary?(true)
+      accept([:total_amount, :currency])
+    end
+  end
+
+  attributes do
+    uuid_primary_key(:id)
+    attribute(:total_amount, :decimal, public?: true)
+    attribute(:currency, :string, public?: true)
+  end
+end
+
 defmodule AshEx4pm.Test.LineItem do
   @moduledoc "Real related Ash resource -- appended via manage_relationship on Order."
   use Ash.Resource,
@@ -103,6 +137,7 @@ defmodule AshEx4pm.Test.Domain do
   resources do
     resource(AshEx4pm.Test.Order)
     resource(AshEx4pm.Test.Widget)
+    resource(AshEx4pm.Test.Invoice)
     resource(AshEx4pm.Test.LineItem)
   end
 end

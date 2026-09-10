@@ -126,10 +126,7 @@ defmodule AshEx4pm.Notifier do
       },
       "sequence" => System.unique_integer([:positive]),
       "objects" => %{
-        record_id => %{
-          "id" => record_id,
-          "type" => resource_type_name(notification.resource)
-        }
+        record_id => object_map(activity, notification.resource, record_id, notification.data)
       },
       "events" => [
         %{
@@ -141,6 +138,71 @@ defmodule AshEx4pm.Notifier do
       ]
     }
   end
+
+  # Builds the OCEL object map for the acting resource. When the firing
+  # `activity` declares an `object_type:` that resolves to a real,
+  # compiled `AshEx4pm.ObjectType` (AshEx4pm.Transformers.Persist already
+  # refused to compile any activity whose `object_type:` does not
+  # resolve), the declared type's own `name` is used as the OCEL "type"
+  # instead of `resource_type_name/1`'s module-name derivation, and the
+  # object's declared attributes are populated from the resource's real,
+  # persisted data -- never invented, never silently defaulted for a
+  # missing/nil field. `Ex4pm.OCEL.validate_envelope/1`
+  # (`~/ex4pm/lib/ex4pm/ocel.ex:139-153`) accepts any non-id/non-type key
+  # on an object map as an attribute (`drop_known_object_keys/1`), and
+  # also accepts an explicit nested `"attributes"` map
+  # (`~/ex4pm/lib/ex4pm/ocel.ex:494`) -- this uses the explicit nested
+  # form, confirmed accepted by reading the real downstream validator,
+  # not assumed.
+  #
+  # With no `object_type:` declared (the real, disclosed back-compat
+  # path), this falls back to the historical `resource_type_name/1`
+  # behavior with no attributes -- unchanged from before this fix, so
+  # existing resources with no `object_type` declaration keep emitting
+  # exactly the same envelope shape they always did.
+  @doc false
+  def object_map(activity, resource, record_id, data) do
+    case declared_object_type(activity, resource) do
+      nil ->
+        %{"id" => record_id, "type" => resource_type_name(resource)}
+
+      %AshEx4pm.ObjectType{} = object_type ->
+        base = %{"id" => record_id, "type" => to_string(object_type.name)}
+        attrs = declared_attributes(object_type, data)
+
+        if map_size(attrs) == 0, do: base, else: Map.put(base, "attributes", attrs)
+    end
+  end
+
+  defp declared_object_type(%{object_type: nil}, _resource), do: nil
+
+  defp declared_object_type(%{object_type: name}, resource) do
+    resource
+    |> AshEx4pm.Info.compiled()
+    |> case do
+      nil -> nil
+      compiled -> get_in(compiled, [:object_types, name])
+    end
+  end
+
+  # Only declared attribute names that are actually present (a real Ash
+  # struct field, or a plain map key) AND non-nil are included -- a
+  # missing/nil field is omitted rather than emitted as a fabricated
+  # `nil`/empty value, the same "never a silently-empty fallback"
+  # discipline `pk_values/2` already applies to primary-key resolution
+  # below.
+  defp declared_attributes(%AshEx4pm.ObjectType{attributes: attributes}, data)
+       when is_map(data) do
+    Enum.reduce(attributes, %{}, fn {name, _type}, acc ->
+      case Map.fetch(data, name) do
+        {:ok, nil} -> acc
+        {:ok, value} -> Map.put(acc, to_string(name), value)
+        :error -> acc
+      end
+    end)
+  end
+
+  defp declared_attributes(_object_type, _data), do: %{}
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
 
