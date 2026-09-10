@@ -45,35 +45,51 @@ defmodule AshEx4pm.Verifiers.Verify do
     Enum.find_value(activities, :ok, fn a ->
       resource = a.resource || module
 
-      action_names =
-        if resource == module do
+      cond do
+        resource == module ->
           # Self-reference (the common, resource-level case): the module is
           # still mid-compile, so Ash.Resource.Info can't be called on it as
           # a loaded module -- read its own actions section directly out of
           # the dsl_state we already have, the real Spark-verifier-safe way.
-          dsl_state
-          |> Verifier.get_entities([:actions])
-          |> Enum.map(& &1.name)
-        else
+          action_names =
+            dsl_state
+            |> Verifier.get_entities([:actions])
+            |> Enum.map(& &1.name)
+
+          validate_on(a, resource, action_names, module)
+
+        Code.ensure_loaded?(resource) and function_exported?(resource, :spark_dsl_config, 0) ->
           # A domain-level activity explicitly names a DIFFERENT, already
           # separately-compiled resource -- safe to call the real
           # Ash.Resource.Info API on it directly.
-          if Code.ensure_loaded?(resource) and function_exported?(resource, :spark_dsl_config, 0) do
-            resource |> Ash.Resource.Info.actions() |> Enum.map(& &1.name)
-          end
-        end
+          action_names = resource |> Ash.Resource.Info.actions() |> Enum.map(& &1.name)
+          validate_on(a, resource, action_names, module)
 
-      if action_names && a.on && a.on not in action_names do
-        {:error,
-         Spark.Error.DslError.exception(
-           module: module,
-           path: [:ex4pm, a.name, :on],
-           message:
-             "`activity #{inspect(a.name)}, on: #{inspect(a.on)}` references an action that " <>
-               "does not exist on #{inspect(resource)}. Real action names: #{inspect(action_names)}."
-         )}
+        true ->
+          # `resource:` names an unloaded module, a genuine typo, or a
+          # loaded module that isn't an Ash resource at all -- fail closed
+          # instead of silently skipping validation for this activity.
+          {:error,
+           Spark.Error.DslError.exception(
+             module: module,
+             path: [:ex4pm, a.name, :resource],
+             message: "`resource: #{inspect(resource)}` is not a compiled Ash resource."
+           )}
       end
     end)
+  end
+
+  defp validate_on(a, resource, action_names, module) do
+    if a.on && a.on not in action_names do
+      {:error,
+       Spark.Error.DslError.exception(
+         module: module,
+         path: [:ex4pm, a.name, :on],
+         message:
+           "`activity #{inspect(a.name)}, on: #{inspect(a.on)}` references an action that " <>
+             "does not exist on #{inspect(resource)}. Real action names: #{inspect(action_names)}."
+       )}
+    end
   end
 
   defp check_no_duplicate_names(activities, module) do

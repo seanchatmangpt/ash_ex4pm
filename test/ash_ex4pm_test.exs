@@ -104,6 +104,32 @@ defmodule AshEx4pmTest do
     assert output =~ "Spark.Error.DslError"
   end
 
+  test "a domain-level activity with a non-Ash-resource `resource:` is refused, not silently skipped" do
+    output =
+      capture_io(:stderr, fn ->
+        Code.compile_string("""
+        defmodule AshEx4pm.Test.NotAResource do
+          def hello, do: :world
+        end
+
+        defmodule AshEx4pm.Test.BadDomain do
+          use Ash.Domain,
+            validate_config_inclusion?: false,
+            extensions: [AshEx4pm]
+
+          ex4pm do
+            activity :order_created,
+              on: :not_a_real_action,
+              resource: AshEx4pm.Test.NotAResource
+          end
+        end
+        """)
+      end)
+
+    assert output =~ "is not a compiled Ash resource"
+    assert output =~ "Spark.Error.DslError"
+  end
+
   test "explicit resource: on a resource-level activity is refused" do
     # Unlike the verifier-raised error above, this one is raised by
     # AshEx4pm.Transformers.Persist -- transformers run synchronously
