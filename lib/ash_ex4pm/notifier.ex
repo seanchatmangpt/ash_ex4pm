@@ -116,6 +116,7 @@ defmodule AshEx4pm.Notifier do
       AshEx4pm.Info.compiled(notification.resource)[:provenance_source] || :ash_ex4pm
 
     record_id = record_id(notification.resource, notification.data)
+    timestamp = DateTime.utc_now()
 
     %{
       "schema" => "ash_ex4pm/1",
@@ -124,7 +125,18 @@ defmodule AshEx4pm.Notifier do
         "runtime" => "beam",
         "resource" => inspect(notification.resource)
       },
-      "sequence" => System.unique_integer([:positive]),
+      # Ex4pm.OCEL.validate_envelope/1 (`~/ex4pm/lib/ex4pm/ocel.ex:385`)
+      # requires this field to be a real integer -- a UUID/hash string is
+      # rejected outright, so it cannot carry the durable-identity fix
+      # below. System.os_time(:nanosecond) is still real-BEAM-process-local
+      # in the sense that it is not a coordinated distributed sequence, but
+      # unlike System.unique_integer/1 it is wall-clock derived: it does
+      # NOT reset to 1 on VM restart, and at nanosecond resolution two
+      # nodes producing the "same" sequence value requires them to emit
+      # within the same nanosecond -- a real, disclosed, and far weaker
+      # collision surface than a counter that is guaranteed to start over
+      # at 1 on every boot.
+      "sequence" => System.os_time(:nanosecond),
       "objects" => %{
         record_id => %{
           "id" => record_id,
@@ -133,13 +145,34 @@ defmodule AshEx4pm.Notifier do
       },
       "events" => [
         %{
-          "id" => "ev_#{System.unique_integer([:positive])}",
+          "id" => event_id(notification.resource, activity, record_id, timestamp),
           "activity" => to_string(activity.name),
-          "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+          "timestamp" => DateTime.to_iso8601(timestamp),
           "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}]
         }
       ]
     }
+  end
+
+  # Deterministic, globally-unique, restart-stable event id: a SHA-256
+  # digest of (resource module, activity name, resolved record id,
+  # ISO-8601 timestamp), not System.unique_integer/1 (process-local,
+  # resets to 1 on every VM restart, no cross-node uniqueness -- see the
+  # confirmed finding this replaces). Same logical event (same resource +
+  # activity + record + timestamp) on a retried/duplicate notify/1 firing
+  # now produces the SAME id, which is what makes id-based downstream
+  # dedup possible; System.unique_integer/1 could never do that because it
+  # produces a different value on every call by definition.
+  @doc false
+  def event_id(resource, activity, record_id, %DateTime{} = timestamp) do
+    digest =
+      :crypto.hash(
+        :sha256,
+        [inspect(resource), to_string(activity.name), record_id, DateTime.to_iso8601(timestamp)]
+      )
+      |> Base.encode16(case: :lower)
+
+    "ev_" <> digest
   end
 
   defp resource_type_name(resource), do: resource |> Module.split() |> List.last()
