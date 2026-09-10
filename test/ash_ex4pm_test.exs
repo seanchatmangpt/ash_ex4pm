@@ -359,4 +359,49 @@ defmodule AshEx4pmTest do
       assert {:error, %Ash.Error.Invalid{}} = result
     end
   end
+
+  describe "BrceGate before_action ordering relative to other changes" do
+    setup do
+      case Process.whereis(AshEx4pm.Test.SideEffectLog) do
+        nil -> start_supervised!(AshEx4pm.Test.SideEffectLog)
+        _pid -> :ok
+      end
+
+      AshEx4pm.Test.SideEffectLog.reset()
+      :ok
+    end
+
+    test "a refused gate declared AFTER another before_action change still runs first, " <>
+           "so the other change's side effect never happens" do
+      # AshEx4pm.Test.OrderedGatedResource declares SideEffectChange
+      # BEFORE BrceGate in its `changes:` list -- the exact hazard the
+      # finding described (a maintainer placing the gate second). With
+      # plain declaration-order `before_action` semantics this would let
+      # SideEffectChange's Agent bump run before the (refused) gate ever
+      # checks admission. `prepend?: true` on BrceGate's hook must keep
+      # that from happening.
+      result =
+        AshEx4pm.Test.OrderedGatedResource
+        |> Ash.Changeset.for_create(:create, %{})
+        |> Ash.create()
+
+      assert {:error, %Ash.Error.Invalid{}} = result
+
+      # Real, observed state -- not an interaction assertion: the side
+      # effect's own counter, actually queried from the real Agent
+      # process, is still zero because the gate ran (and halted) first.
+      assert AshEx4pm.Test.SideEffectLog.count() == 0
+    end
+
+    test "an admitted gate declared AFTER another before_action change lets the other " <>
+           "change's side effect run afterward" do
+      result =
+        AshEx4pm.Test.OrderedGatedResource
+        |> Ash.Changeset.for_create(:create, %{}, actor: %{capabilities: [:do]})
+        |> Ash.create()
+
+      assert {:ok, _} = result
+      assert AshEx4pm.Test.SideEffectLog.count() == 1
+    end
+  end
 end
