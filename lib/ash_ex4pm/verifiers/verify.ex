@@ -50,27 +50,17 @@ defmodule AshEx4pm.Verifiers.Verify do
     Enum.find_value(activities, :ok, fn a ->
       resource = a.resource || module
 
-      cond do
-        resource == module ->
-          # Self-reference (the common, resource-level case): the module is
-          # still mid-compile, so Ash.Resource.Info can't be called on it as
-          # a loaded module -- read its own actions section directly out of
-          # the dsl_state we already have, the real Spark-verifier-safe way.
-          action_names =
-            dsl_state
-            |> Verifier.get_entities([:actions])
-            |> Enum.map(& &1.name)
-
+      case resolve_entity_names(
+             resource,
+             module,
+             dsl_state,
+             :actions,
+             &Ash.Resource.Info.actions/1
+           ) do
+        {:ok, action_names} ->
           validate_on(a, resource, action_names, module)
 
-        Code.ensure_loaded?(resource) and function_exported?(resource, :spark_dsl_config, 0) ->
-          # A domain-level activity explicitly names a DIFFERENT, already
-          # separately-compiled resource -- safe to call the real
-          # Ash.Resource.Info API on it directly.
-          action_names = resource |> Ash.Resource.Info.actions() |> Enum.map(& &1.name)
-          validate_on(a, resource, action_names, module)
-
-        true ->
+        :unresolved ->
           # `resource:` names an unloaded module, a genuine typo, or a
           # loaded module that isn't an Ash resource at all -- fail closed
           # instead of silently skipping validation for this activity.
@@ -101,31 +91,20 @@ defmodule AshEx4pm.Verifiers.Verify do
     Enum.find_value(activities, :ok, fn a ->
       resource = a.resource || module
 
-      relationship_names =
-        cond do
-          resource == module ->
-            # Self-reference: the module is still mid-compile, so read the
-            # `relationships` section directly out of `dsl_state`, the same
-            # verifier-safe pattern `check_actions_exist/3` uses for `:actions`.
-            dsl_state
-            |> Verifier.get_entities([:relationships])
-            |> Enum.map(& &1.name)
-
-          Code.ensure_loaded?(resource) and function_exported?(resource, :spark_dsl_config, 0) ->
-            resource |> Ash.Resource.Info.relationships() |> Enum.map(& &1.name)
-
-          true ->
-            nil
-        end
-
-      cond do
-        relationship_names == nil ->
+      case resolve_entity_names(
+             resource,
+             module,
+             dsl_state,
+             :relationships,
+             &Ash.Resource.Info.relationships/1
+           ) do
+        :unresolved ->
           # An unloaded/non-resource `resource:` is already reported by
           # check_actions_exist/3 above (verify/1 runs it first); avoid a
           # second, redundant error for the same root cause here.
           :ok
 
-        true ->
+        {:ok, relationship_names} ->
           Enum.find_value(a.object_relationships, :ok, fn rel ->
             if rel.relationship not in relationship_names do
               {:error,
@@ -141,6 +120,29 @@ defmodule AshEx4pm.Verifiers.Verify do
           end)
       end
     end)
+  end
+
+  # Shared self-reference-vs-external-resource resolution: `check_actions_exist/3`
+  # and `check_relationships_exist/3` both need this same real, three-way
+  # branch to read an entity list (`:actions`/`:relationships`) for a
+  # resource that might be (a) the module currently mid-compile (must read
+  # the section straight out of `dsl_state` -- `Ash.Resource.Info` cannot
+  # call into a module that hasn't finished compiling), (b) a different,
+  # already-loaded-and-compiled Ash resource (safe to call the real
+  # `Ash.Resource.Info` API on directly), or (c) an unloaded module, a
+  # typo, or a loaded module that isn't an Ash resource at all
+  # (`:unresolved` -- each caller decides how to report/skip that case).
+  defp resolve_entity_names(resource, module, dsl_state, section, info_fun) do
+    cond do
+      resource == module ->
+        {:ok, dsl_state |> Verifier.get_entities([section]) |> Enum.map(& &1.name)}
+
+      Code.ensure_loaded?(resource) and function_exported?(resource, :spark_dsl_config, 0) ->
+        {:ok, resource |> info_fun.() |> Enum.map(& &1.name)}
+
+      true ->
+        :unresolved
+    end
   end
 
   defp check_no_duplicate_names(activities, module) do

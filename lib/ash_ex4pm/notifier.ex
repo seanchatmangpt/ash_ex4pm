@@ -279,14 +279,13 @@ defmodule AshEx4pm.Notifier do
   # Only declared attribute names that are actually present (a real Ash
   # struct field, or a plain map key) AND non-nil are included -- a
   # missing/nil field is omitted rather than emitted as a fabricated
-  # `nil`/empty value, the same "never a silently-empty fallback"
-  # discipline `pk_values/2` already applies to primary-key resolution
-  # below.
+  # `nil`/empty value, the same "present and non-nil" rule `fetch_present/2`
+  # (below) applies everywhere else this notifier reads a field off real
+  # notification data.
   defp declared_attributes(%AshEx4pm.ObjectType{attributes: attributes}, data)
        when is_map(data) do
     Enum.reduce(attributes, %{}, fn {name, _type}, acc ->
-      case Map.fetch(data, name) do
-        {:ok, nil} -> acc
+      case fetch_present(data, name) do
         {:ok, value} -> Map.put(acc, to_string(name), value)
         :error -> acc
       end
@@ -458,23 +457,22 @@ defmodule AshEx4pm.Notifier do
     "ev_" <> digest
   end
 
-  defp fetch_field(data, name) when is_struct(data) do
-    case Map.fetch(data, name) do
-      {:ok, nil} -> :error
-      {:ok, value} -> {:ok, value}
-      :error -> :error
-    end
-  end
-
-  defp fetch_field(data, name) when is_map(data) do
-    case Map.fetch(data, to_string(name)) do
-      {:ok, nil} -> :error
-      {:ok, value} -> {:ok, value}
-      :error -> :error
-    end
-  end
-
+  defp fetch_field(data, name) when is_struct(data), do: fetch_present(data, name)
+  defp fetch_field(data, name) when is_map(data), do: fetch_present(data, to_string(name))
   defp fetch_field(_data, _name), do: :error
+
+  # Shared "present and non-nil" rule: a key that is either missing or set
+  # to `nil` is treated identically as :error (absent), everywhere this
+  # notifier reads a field off real notification data (declared object
+  # attributes, declared event attributes, primary-key values) -- never a
+  # silently-fabricated `nil`/empty value standing in for a real one.
+  defp fetch_present(map, key) do
+    case Map.fetch(map, key) do
+      {:ok, nil} -> :error
+      {:ok, value} -> {:ok, value}
+      :error -> :error
+    end
+  end
 
   defp coerce_attribute(value, :string) when is_binary(value), do: {:ok, value}
   defp coerce_attribute(value, :string) when is_atom(value), do: {:ok, to_string(value)}
@@ -591,12 +589,11 @@ defmodule AshEx4pm.Notifier do
   end
 
   # Returns the list of primary-key values only if every one is present
-  # and non-nil; otherwise :error, so a nil/unset pk field never falls
-  # through as an empty string.
+  # and non-nil (via fetch_present/2); otherwise :error, so a nil/unset pk
+  # field never falls through as an empty string.
   defp pk_values(data, pk) do
     Enum.reduce_while(pk, [], fn field, acc ->
-      case Map.fetch(data, field) do
-        {:ok, nil} -> {:halt, :error}
+      case fetch_present(data, field) do
         {:ok, value} -> {:cont, [value | acc]}
         :error -> {:halt, :error}
       end
@@ -606,6 +603,13 @@ defmodule AshEx4pm.Notifier do
       values -> Enum.reverse(values)
     end
   end
+
+  # Shared prefix for a synthetic, non-reproducible object id -- kept as a
+  # single named constant rather than a bare string literal repeated at
+  # every generation/inspection site, so a caller elsewhere in the codebase
+  # that ever needs to recognize a synthetic id cannot silently desync from
+  # this literal.
+  @synthetic_id_prefix "synthetic_obj_"
 
   defp record_id_fallback(resource, data) do
     cond do
@@ -622,7 +626,7 @@ defmodule AshEx4pm.Notifier do
             "using a synthetic, non-reproducible object id"
         )
 
-        "synthetic_obj_#{System.unique_integer([:positive])}"
+        @synthetic_id_prefix <> Integer.to_string(System.unique_integer([:positive]))
     end
   end
 end
