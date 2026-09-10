@@ -74,14 +74,24 @@ defmodule AshEx4pm.Changes.BrceGate do
 
         cond do
           is_map(actor) and Map.has_key?(actor, :capabilities) ->
-            %{capabilities: actor.capabilities}
+            %{capabilities: normalize_capabilities(actor.capabilities)}
 
           is_map(actor) and Map.has_key?(actor, "capabilities") ->
-            %{capabilities: actor["capabilities"]}
+            %{capabilities: normalize_capabilities(actor["capabilities"])}
 
           true ->
             %{}
         end
     end
   end
+
+  # `Ex4pm.Evidence.BRCE.admit/2` evaluates `:do in capabilities` directly
+  # (`ex4pm/lib/ex4pm/evidence.ex:245`), which raises for any non-list right-hand
+  # side (Protocol.UndefinedError / BadMapError). A malformed or attacker-controlled
+  # actor (e.g. a JSON-decoded actor whose `capabilities` came through as a bare
+  # string) must never crash this `before_action` hook with an unhandled exception
+  # -- it must always resolve to a controlled BRCE refusal instead. Normalize any
+  # non-list value to `[]` here, before the authority map is ever built.
+  defp normalize_capabilities(capabilities) when is_list(capabilities), do: capabilities
+  defp normalize_capabilities(_capabilities), do: []
 end

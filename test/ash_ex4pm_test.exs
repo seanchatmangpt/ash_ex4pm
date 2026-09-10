@@ -348,4 +348,15 @@ defmodule AshEx4pmTest do
     assert log =~ "AshEx4pm.Notifier: ingest_envelope refused"
     assert log =~ "invalid_sequence"
   end
+
+  test "AshEx4pm.Changes.BrceGate refuses cleanly, without raising, when actor.capabilities is a malformed non-list" do
+    for malformed_capabilities <- ["do", %{}, 1, {:do}] do
+      result =
+        AshEx4pm.Test.GatedResource
+        |> Ash.Changeset.for_create(:create, %{}, actor: %{capabilities: malformed_capabilities})
+        |> Ash.create()
+
+      assert {:error, %Ash.Error.Invalid{}} = result
+    end
+  end
 end
