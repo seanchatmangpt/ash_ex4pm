@@ -30,8 +30,9 @@ defmodule AshEx4pm.Notifier do
   ## Scope: single-object events only
 
   `build_envelope/2` always emits exactly one OCEL object -- the acting
-  resource's own `record_id` -- and one relationship entry
-  (`qualifier: "primary"` pointing at that same id). This is deliberate,
+  resource's own `record_id` -- and one relationship entry pointing at
+  that same id, with its `qualifier` taken from the matching `activity`'s
+  own `qualifier:` DSL option (default `"primary"`). This is deliberate,
   not an oversight: a single `Ash.Notifier.Notification` here corresponds
   to a single resource/changeset, and `notify/1` has no reliable way to
   recover the *actual persisted* identities of records touched via
@@ -136,7 +137,7 @@ defmodule AshEx4pm.Notifier do
           "id" => "ev_#{System.unique_integer([:positive])}",
           "activity" => to_string(activity.name),
           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-          "relationships" => [%{"objectId" => record_id, "qualifier" => "primary"}]
+          "relationships" => [%{"objectId" => record_id, "qualifier" => activity.qualifier}]
         }
       ]
     }

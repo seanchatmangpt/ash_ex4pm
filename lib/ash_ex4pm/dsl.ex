@@ -16,12 +16,20 @@ defmodule AshEx4pm.Activity do
   vocabulary.
   """
   @enforce_keys [:name, :on]
-  defstruct [:name, :on, :resource, :__identifier__, :__spark_metadata__]
+  defstruct [
+    :name,
+    :on,
+    :resource,
+    qualifier: "primary",
+    __identifier__: nil,
+    __spark_metadata__: nil
+  ]
 
   @type t :: %__MODULE__{
           name: atom(),
           on: atom(),
-          resource: module() | nil
+          resource: module() | nil,
+          qualifier: String.t()
         }
 end
 
@@ -56,6 +64,19 @@ defmodule AshEx4pm.Dsl do
             "AshEx4pm.Transformers.Persist for resource-level declarations; required " <>
             "explicitly for domain-level declarations. Setting it explicitly at the " <>
             "resource level is a compile error (see AshEx4pm.Transformers.Persist)."
+      ],
+      qualifier: [
+        type: :string,
+        required: false,
+        default: "primary",
+        doc:
+          "The OCEL 2.0 E2O (event-to-object) qualifier for this activity's own " <>
+            "relationship to the acting resource's record -- e.g. \"resource\", " <>
+            "\"customer\", \"target\". Read directly by AshEx4pm.Notifier.build_envelope/2 " <>
+            "into the emitted event's relationships entry " <>
+            "(`%{\"objectId\" => record_id, \"qualifier\" => qualifier}`), which " <>
+            "Ex4pm.OCEL.extract_relationships/1 accepts as any string. Defaults to " <>
+            "\"primary\" for backward compatibility with resources that don't declare one."
       ]
     ]
   }
