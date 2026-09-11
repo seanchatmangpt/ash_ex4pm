@@ -7,6 +7,6 @@
     },
     "template": "priv/ggen/templates/ferroplan.ex.eex",
     "out": "lib/ash_ex4pm/ferroplan.ex",
-    "test_path": null
+    "test_path": "test/ash_ex4pm_test.exs"
   }
 ]
