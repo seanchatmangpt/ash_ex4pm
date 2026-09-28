@@ -7,4 +7,8 @@
 # call resolves a real running miner instead of `nil`.
 {:ok, _} = Ex4pm.Engine.OnlineMiner.start_link(name: Ex4pm.Engine.OnlineMiner)
 
+# Real idempotency ledger for AshEx4pm.Changes.ReceiptedAction (owned by
+# the test runner process for the whole suite, like the miner above).
+{:ok, _} = AshEx4pm.ReceiptStore.Ets.start_link()
+
 ExUnit.start()
