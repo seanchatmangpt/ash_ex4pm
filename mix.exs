@@ -15,7 +15,22 @@ defmodule AshEx4pm.MixProject do
       package: package(),
       description: description(),
       docs: docs(),
-      source_url: @source_url
+      source_url: @source_url,
+      aliases: aliases()
+    ]
+  end
+
+  def cli do
+    [preferred_envs: [verify: :test]]
+  end
+
+  defp aliases do
+    [
+      verify: [
+        "format --check-formatted",
+        "compile --warnings-as-errors",
+        "test"
+      ]
     ]
   end
 
