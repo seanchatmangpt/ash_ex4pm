@@ -1,48 +1,65 @@
 # AshEx4pm
 
-An Ash extension for automatic OCEL 2.0 event emission from Ash resources/domains,
-built directly on `ex4pm`'s real, canonical functions — `Ex4pm.Stream.Ingest.ingest_envelope/1`
-for real-time notification-based emission, and `Ex4pm.Evidence.BRCE.execute/4` for an
-optional pre-commit admission gate.
+AshEx4pm is the Ash projection layer for ex4pm process evidence, admitted
+runtime capabilities, wasm4pm analysis, ferroplan planning, and receipted Ash
+actions.
+
+The ownership boundary is deliberate:
+
+~~~text
+Ash resource/domain
+        |
+        v
+    AshEx4pm
+        |
+        v
+      ex4pm
+       /  \
+      v    v
+ wasm4pm  ferroplan
+~~~
+
+wasm4pm and ferroplan own algorithms and planning semantics. ex4pm owns their
+runtime integration, admission, evidence, replay, and provider boundaries.
+AshEx4pm owns the Ash-facing projection. A capability being known or projected
+does not mean it is ALIVE, authorized, or allowed to perform DO.
 
 ## Installation
 
-Add `ash_ex4pm` to your `mix.exs` deps:
-
-```elixir
+~~~elixir
 def deps do
   [
     {:ash_ex4pm, "~> 26.10"}
   ]
 end
-```
+~~~
 
-`ash_ex4pm` itself pins `ex4pm` exactly (`{:ex4pm, "== 26.10.1"}`, see this repo's own
-`mix.exs`), not with a `~>` range: `ex4pm`'s third CalVer component carries contract
-changes, and each `ex4pm` release's `CHANGELOG.md` declares that release's public
-contract in an explicit "Public contract" subsection, so a `~>` range cannot actually
-guarantee the compatibility it implies for a real SemVer package.
+AshEx4pm 26.10.2 continues to pin the published ex4pm 26.10.1 contract exactly:
 
-`ash_ex4pm` takes `ex4pm` from Hex: `mix.exs` pins the real, published,
-checksum-verifiable release `{:ex4pm, "== 26.10.1"}`
-([hex.pm/packages/ex4pm/26.10.1](https://hex.pm/packages/ex4pm/26.10.1)); it was a
-path dependency only during initial co-development (see this repo's git history).
-A path pin remains an alternative when developing against a sibling `ex4pm`
-checkout:
+~~~elixir
+{:ex4pm, "== 26.10.1"}
+~~~
 
-```elixir
-{:ex4pm, path: "../ex4pm"}
-```
+The patch component of ex4pm's CalVer is contract-bearing, so this project does
+not widen or invent compatibility with an unverified upstream release.
 
-## Usage
+## Documentation
 
-Declare an `ex4pm do ... end` block inside an `Ash.Resource`, add
-`extensions: [AshEx4pm]` to compile the DSL, and add `notifiers: [AshEx4pm.Notifier]`
-explicitly so emission actually fires (see "Non-goals" below — this is not automatic).
-This example mirrors the real resource this extension's own test suite exercises
-(`test/support/test_domain.ex`):
+The README is the entrypoint, not the full manual. Start with the
+[Diátaxis index](docs/INDEX.md).
 
-```elixir
+Canonical upstream documentation:
+
+- [ex4pm Diátaxis reference](https://github.com/seanchatmangpt/ex4pm/blob/main/docs/diataxis/reference.md)
+- [wasm4pm Diátaxis index](https://github.com/seanchatmangpt/wasm4pm/blob/main/docs/INDEX.md)
+- [ferroplan planning types](https://github.com/seanchatmangpt/ferroplan/blob/main/docs/planning-types.md)
+- [ferroplan FOND/HDDL semantics](https://github.com/seanchatmangpt/ferroplan/blob/main/docs/FOND-HTN.md)
+
+## Minimal OCEL resource
+
+Declare an ex4pm DSL block and explicitly register the notifier:
+
+~~~elixir
 defmodule MyApp.Order do
   use Ash.Resource,
     domain: MyApp.Domain,
@@ -61,11 +78,6 @@ defmodule MyApp.Order do
       primary?(true)
       accept([:status])
     end
-
-    update :ship do
-      accept([])
-      change(set_attribute(:status, :shipped))
-    end
   end
 
   attributes do
@@ -73,127 +85,147 @@ defmodule MyApp.Order do
     attribute(:status, :atom, default: :pending, public?: true)
   end
 end
+~~~
 
-defmodule MyApp.Domain do
-  use Ash.Domain, validate_config_inclusion?: false
+A matching post-commit notification builds an OCEL 2.0 envelope and delegates
+to Ex4pm.Stream.Ingest.ingest_envelope/1. A refused ingest does not roll back the
+already-committed Ash action.
 
-  resources do
-    resource(MyApp.Order)
-  end
-end
-```
+## Capability discovery
 
-Calling `Ash.Changeset.for_create(:create, ...) |> Ash.create()` fires
-`AshEx4pm.Notifier`, which finds the matching `activity` declaration (`on: :create`),
-builds a real OCEL 2.0 envelope, and calls `Ex4pm.Stream.Ingest.ingest_envelope/1`. An
-action with no matching `activity` (like `:ship` above, which has no
-`activity ..., on: :ship` declared) emits nothing. A refused or failed ingest never
-blocks the Ash action itself — the notifier is fire-and-forget and runs post-commit,
-matching `Ash.Notifier`'s own post-commit semantics.
+v26.10.2 adds a machine-readable projection registry:
 
-Introspect the compiled DSL state via `AshEx4pm.Info`:
+~~~elixir
+AshEx4pm.capabilities()
+AshEx4pm.capabilities(owner: :ferroplan)
+AshEx4pm.capability(:ferroplan_plan)
+AshEx4pm.capability_standing(:wasm_algorithms)
+~~~
 
-```elixir
-AshEx4pm.Info.compiled?(MyApp.Order)
-# => true
+The important distinction is:
 
-AshEx4pm.Info.activities(MyApp.Order)
-# => [%AshEx4pm.Activity{name: :order_created, on: :create, resource: MyApp.Order}]
-```
+~~~text
+upstream capability
+    != projected capability
+    != admitted runtime capability
+    != authorized consequence
+~~~
 
-`activity` entities can also be declared at the domain level (`ex4pm do ... end` inside
-`Ash.Domain`), in which case `resource:` must be set explicitly — there's no implicit
-resource to infer it from. `AshEx4pm.Verifiers.Verify` fails the compile
-(`Spark.Error.DslError`) if an `activity`'s `on:` action doesn't actually exist on the
-target resource, or if two activities declare the same name for the same resource.
+The registry records the canonical owner, Ash projection, function/arity,
+boundary, authority semantics, DO authority, and documentation for each
+projected capability. See [Capability reference](docs/reference/capabilities.md).
 
-## The BRCE gate: `AshEx4pm.Changes.BrceGate`
+## wasm4pm through AshEx4pm.WasmRuntime
 
-For state-changing actions that need pre-commit authorization rather than
-post-commit notification, add `AshEx4pm.Changes.BrceGate` as a `change`:
+AshEx4pm.WasmRuntime delegates to ex4pm's canonical wasm runtime surface. It
+owns no wasm4pm semantics.
 
-```elixir
+Representative calls:
+
+~~~elixir
+AshEx4pm.WasmRuntime.available?()
+AshEx4pm.WasmRuntime.standing()
+AshEx4pm.WasmRuntime.algorithms()
+AshEx4pm.WasmRuntime.statistics(:mean, [1, 2, 3])
+AshEx4pm.WasmRuntime.forecast([1, 2, 3])
+~~~
+
+The wider wasm4pm substrate includes process mining, object-centric querying,
+statistics, forecasting, deterministic cognition and planning. Upstream
+existence does not imply that every capability is projected or ALIVE here; use
+the registry and live standing surfaces rather than README inference.
+
+## ferroplan through AshEx4pm
+
+The stateless planning seam is AshEx4pm.FerroplanRuntime:
+
+~~~elixir
+AshEx4pm.FerroplanRuntime.available?()
+AshEx4pm.FerroplanRuntime.standing()
+AshEx4pm.FerroplanRuntime.plan(domain, problem)
+AshEx4pm.FerroplanRuntime.plan_production(domain, problem)
+~~~
+
+The stateful seam is AshEx4pm.FerroplanSessions:
+
+~~~elixir
+{:ok, session} = AshEx4pm.FerroplanSessions.new(domain, problem)
+AshEx4pm.FerroplanSessions.observe(session.id, observation)
+AshEx4pm.FerroplanSessions.think(session.id)
+AshEx4pm.FerroplanSessions.replan_following(session.id)
+AshEx4pm.FerroplanSessions.repair(session.id)
+~~~
+
+Planning and session results are CONSTRUCT-side candidates. They do not mutate
+Ash business state and do not acquire DO authority by crossing the adapter.
+
+## BRCE: admission-only and receipted DO are separate
+
+AshEx4pm exposes two intentionally different changes.
+
+### Admission-only: AshEx4pm.Changes.BrceGate
+
+~~~elixir
 create :create do
   change({AshEx4pm.Changes.BrceGate, operation: :create_order})
 end
-```
+~~~
 
-This wires `Ex4pm.Evidence.BRCE.execute/4` — the sole authority `ex4pm` designates for
-gating a state-changing callback — ahead of the Ash action's own mutation, via a
-`before_action` hook. The authority map BRCE requires (`%{capabilities: [...]}`) is
-built from the changeset's real actor: by default, the actor's own `:capabilities`
-field is used directly (an actor with no `:capabilities` gets an empty authority map
-and is refused); pass `authority_from: fun` (arity 1, changeset -> map) to override. A
-BRCE refusal becomes a real Ash changeset error via `Ash.Changeset.add_error/2` — the
-action never reaches Ash's own mutation on refusal.
+BrceGate performs pre-action admission with a pure placeholder callback. Its
+receipt proves admission, not the later Ash mutation. Use this when admission
+alone is the required boundary.
 
-**Disclosed scope limitation** (from the module's own moduledoc): `BRCE.execute/4`'s
-`fun` argument here is a pure admission placeholder (`fn -> :admitted end`), not the
-real database write — Ash's own action pipeline performs the actual mutation
-separately, after this `before_action` hook returns. This means BRCE's outcome receipt
-reflects real ADMISSION success/failure, not real DB-write success/failure; a DB error
-after admission is not captured in the BRCE receipt chain. Wrapping the real Ash
-mutation itself inside `fun` would require calling into Ash's changeset-apply
-internals from a `before_action` hook, which is not attempted in this release — named
-honestly as a real, unresolved gap rather than claimed as full DO-authority coverage.
+### Receipted DO: AshEx4pm.Changes.ReceiptedAction
 
-## Status
+~~~elixir
+create :create do
+  change({AshEx4pm.Changes.ReceiptedAction, operation: :create_order})
+end
+~~~
 
-Real, working code: the suite declares `112` tests (counted with
-`grep -rc 'test "' test/ --include='*.exs'`; wasm-backed tests skip with an
-explicit named skip when `WASM4PM_EX4PM_WASM` is unset), no mocks — real
-`Ash.DataLayer.Ets`
-resources, real `AshEx4pm.Notifier` firing, real calls into `ex4pm`'s running
-`Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. Earlier releases in the 26.9.x
-line included 10 real hardening
-fixes from an adversarial Ash-maintainer-style review, all covered by the real tests
-above (not asserted, exercised):
+ReceiptedAction installs an outermost around_action and runs the real Ash
+mutation inside Ex4pm.Evidence.BRCE.execute/5. The outcome receipt binds the
+real consequence digest, and the returned Ash record carries
+ash_ex4pm_receipt metadata. It also supports subject checks and idempotency.
 
-- `AshEx4pm.Verifiers.Verify` refuses (`Spark.Error.DslError`) a domain-level
-  `activity`'s `resource:` that is not a compiled Ash resource, in addition to its
-  existing action-existence check.
-- `AshEx4pm.Notifier.record_id/2` resolves a resource's real Ash primary key (not a
-  hardcoded `:id` assumption) — correctly reads a non-`:id`-named primary key (e.g.
-  `:sku`), falls back to a clearly-synthetic id (`"synthetic_obj_" <> _`) for a `nil`
-  or unresolvable value, and still handles a plain map's `:id` key for hand-built
-  generic-action notifications.
-- `AshEx4pm.Changes.BrceGate` validates `actor.capabilities` and refuses cleanly
-  (`{:error, %Ash.Error.Invalid{}}`, no raise) when it is a malformed non-list
-  (a bare string, map, integer, or tuple), instead of crashing on `Enum.member?`.
-- The `:activity` Spark DSL entity carries a real entity-level `describe:` for Spark
-  doc generation.
-- `AshEx4pm.Activity`'s `@enforce_keys [:name, :on]` and its Spark schema's `on:`
-  requiredness now agree — `on:` is genuinely required, refused at compile time
-  (`Spark.Error.DslError`) rather than silently defaulting to `nil`.
-- `AshEx4pm.Transformers.Persist`'s ordering-after-Ash's-core-transformers rationale
-  is corrected and documented against the transformers Ash actually runs.
-- A refused `Ex4pm.Stream.Ingest.ingest_envelope/1` call is now logged
-  (`AshEx4pm.Notifier.log_refusal/3`), not silently swallowed.
-- `AshEx4pm.Changes.BrceGate`'s `before_action` hook uses `prepend?: true`, so the
-  gate always runs before any other `before_action` change on the same resource
-  regardless of declaration order — a refused gate declared *after* another change in
-  the `changes:` list still halts before that other change's side effect runs (real
-  regression test using a real `Agent`-backed side-effect counter, not an interaction
-  assertion).
-- Each admitted/outcome receipt's `subject_hash` is now computed per-record (not just
-  per resource+operation), so two concurrent creates of the same resource+operation
-  with different data get distinguishable subject hashes in `Ex4pm.Evidence.Store`.
-- The single-object-per-envelope scope (a `manage_relationship`-managed related
-  record is never included in the emitted OCEL envelope, only the action's primary
-  object) is documented in the notifier's own moduledoc and covered by a dedicated
-  regression test.
+The remaining boundary is narrower: the receipt is sealed inside the
+around_action transaction scope. A transactional commit failure after that hook
+returns is not yet captured and remains unverified for transactional data
+layers.
 
-Treat the DSL shape as stable for the cases the test suite covers, and everything
-else as unverified until exercised.
+For update/destroy actions using ReceiptedAction, follow the module contract and
+set require_atomic? false.
 
-Explicit non-goals, named in the PRD this implements
-(`~/ex4pm/docs/explanation/ash-ex4pm-prd-ard.md`) and not yet supported:
+## Capability boundaries
 
-- **Global notifier injection** — `AshEx4pm.Notifier` must be added explicitly to a
-  resource's own `notifiers:` list. This extension does not inject itself into an
-  already-declared `notifiers:` list.
-- **Per-Reactor middleware injection** — no automatic wiring of OCEL emission into
-  Reactor-based workflows exists in this release.
+The public capability graph currently includes:
+
+- OCEL 2.0 event emission and object relationships;
+- BRCE admission-only gating;
+- BRCE-wrapped receipted Ash DO;
+- wasm4pm algorithm discovery, statistics and forecasting through ex4pm;
+- ferroplan stateless planning and production planning;
+- stateful ferroplan sessions for think, repair, probe and replanning;
+- Ex4pm.Engine.Result projection into Ash-friendly evidence;
+- the canonical economic ISA adapter.
+
+No alternate wasm or planner semantics are implemented in AshEx4pm.
+
+## Non-goals
+
+- Global notifier injection: add AshEx4pm.Notifier explicitly.
+- Automatic Reactor middleware injection.
+- Treating a plan, forecast, analysis result, or capability descriptor as
+  execution authority.
+- Claiming ALIVE solely because code or an upstream algorithm exists.
+- Duplicating wasm4pm or ferroplan semantic registries.
+
+## Verification
+
+The repository CI runs mix verify: formatting, warnings-as-errors compilation,
+and the real test suite. v26.10.2 also tests the capability registry for unique
+IDs, real exported projection functions, documentation coverage, and the
+planner/DO separation.
 
 ## License
 

@@ -81,7 +81,13 @@ defmodule AshEx4pm.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md"]
+      extras: [
+        "README.md",
+        "docs/INDEX.md",
+        "docs/reference/capabilities.md",
+        "docs/explanation/architecture.md",
+        "docs/PRD-ARD-v26.10.2.md"
+      ]
     ]
   end
 end
