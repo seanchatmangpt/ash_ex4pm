@@ -121,6 +121,29 @@ defmodule AshEx4pm.Notifier do
   object/relationship set for that action (see `action_input.ex`'s
   manual-notification pattern) rather than relying on this notifier's
   one-primary-object-per-action default.
+
+  ## Realtime broadcaster (optional)
+
+  Set `Application.get_env(:ash_ex4pm, :broadcaster)` to observe every
+  freshly-ingested envelope in realtime, forwarded via
+  `Ex4pm.Stream.Ingest.ingest_envelope/2`'s `:broadcaster` opt. Accepted
+  values:
+
+    * `nil` (default) -- today's behavior, unchanged.
+    * a 1-arity fun -- called with
+      `%{envelope:, log:, event_count:}`.
+    * `{mod, fun, args}` -- `apply(mod, fun, args ++ [payload])`, i.e.
+      the broadcast payload is appended to the MFA's argument list.
+
+  Semantics: fire-and-forget in the sense that the callback runs only
+  after the envelope has already been validated and its receipts stored,
+  and it is never called for duplicate envelopes. It is NOT isolated,
+  though: the callback runs synchronously on the caller's process, so a
+  crashing broadcaster raises out of `ingest_envelope/2` and out of this
+  notifier's `notify/1`, which Ash surfaces as an `Ash.Error.Unknown`
+  failure of the action (the already-stored ingest receipts survive).
+  Wrap your callback in `try/rescue` (or run it in a `Task`/`spawn`) if
+  you need isolation.
   """
   use Ash.Notifier
   require Logger
@@ -150,7 +173,7 @@ defmodule AshEx4pm.Notifier do
       activity ->
         envelope = build_envelope(activity, notification)
 
-        case Ex4pm.Stream.Ingest.ingest_envelope(envelope) do
+        case Ex4pm.Stream.Ingest.ingest_envelope(envelope, broadcaster_opts()) do
           {:ok, _result} -> :ok
           # A refused/failed ingest never blocks the Ash action itself --
           # the action already committed by the time notifiers run
@@ -168,6 +191,27 @@ defmodule AshEx4pm.Notifier do
   end
 
   def notify(_), do: :ok
+
+  # Resolves the optional realtime broadcaster from the app env
+  # (`Application.get_env(:ash_ex4pm, :broadcaster)`) into the
+  # `:broadcaster` opt `Ex4pm.Stream.Ingest.ingest_envelope/2` already
+  # accepts (a 1-arity fun called fire-and-forget with
+  # `%{envelope:, log:, event_count:}` only on fresh ingest -- not on
+  # duplicates). Three accepted shapes: `nil` (default; today's behavior,
+  # byte-identical), a 1-arity fun, or an `{mod, fun, args}` MFA applied
+  # with the broadcast payload appended to `args`.
+  defp broadcaster_opts do
+    case Application.get_env(:ash_ex4pm, :broadcaster) do
+      nil ->
+        []
+
+      fun when is_function(fun, 1) ->
+        [broadcaster: fun]
+
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+        [broadcaster: fn payload -> apply(mod, fun, args ++ [payload]) end]
+    end
+  end
 
   # Real `Ash.Notifier.load/2` implementation (Ash 3.x): requests exactly
   # the activity's declared `object_relationship` relationship names be

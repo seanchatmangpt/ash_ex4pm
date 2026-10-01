@@ -4,6 +4,19 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [26.10.2] - 2026-10-01
+
+### Added
+
+- **Optional realtime broadcaster** via app env
+  `Application.get_env(:ash_ex4pm, :broadcaster)` — `nil` (default, current
+  behavior unchanged), a 1-arity fun, or `{module, function, args}`. Threaded
+  through `AshEx4pm.Notifier.notify/1` into
+  `Ex4pm.Stream.Ingest.ingest_envelope/2`'s existing `:broadcaster` opt.
+  Fire-and-forget, fresh-ingest-only. A crashing broadcaster raises
+  synchronously out of the action as `Ash.Error.Unknown` (stored receipts
+  survive). Test coverage: `test/ash_ex4pm/broadcaster_test.exs`.
+
 ## [26.10.1] - 2026-10-01
 
 Release aligned with `ex4pm` 26.10.1 — the published Hex release that removes
