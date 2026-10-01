@@ -12,20 +12,20 @@ Add `ash_ex4pm` to your `mix.exs` deps:
 ```elixir
 def deps do
   [
-    {:ash_ex4pm, "~> 26.9"}
+    {:ash_ex4pm, "~> 26.10"}
   ]
 end
 ```
 
-`ash_ex4pm` itself pins `ex4pm` exactly (`{:ex4pm, "== 26.9.9"}`, see this repo's own
-`mix.exs`), not with a `~>` range: `ex4pm` has no `CHANGELOG.md` or stated versioning
-policy for its third CalVer component as of this writing, so a `~>` range cannot
-actually guarantee the compatibility it implies for a real SemVer package. This will
-be loosened once `ex4pm` publishes a real versioning policy for that component.
+`ash_ex4pm` itself pins `ex4pm` exactly (`{:ex4pm, "== 26.10.1"}`, see this repo's own
+`mix.exs`), not with a `~>` range: `ex4pm`'s third CalVer component carries contract
+changes, and each `ex4pm` release's `CHANGELOG.md` declares that release's public
+contract in an explicit "Public contract" subsection, so a `~>` range cannot actually
+guarantee the compatibility it implies for a real SemVer package.
 
 `ash_ex4pm` takes `ex4pm` from Hex: `mix.exs` pins the real, published,
-checksum-verifiable release `{:ex4pm, "== 26.9.9"}`
-([hex.pm/packages/ex4pm/26.9.9](https://hex.pm/packages/ex4pm/26.9.9)); it was a
+checksum-verifiable release `{:ex4pm, "== 26.10.1"}`
+([hex.pm/packages/ex4pm/26.10.1](https://hex.pm/packages/ex4pm/26.10.1)); it was a
 path dependency only during initial co-development (see this repo's git history).
 A path pin remains an alternative when developing against a sibling `ex4pm`
 checkout:
@@ -139,9 +139,13 @@ honestly as a real, unresolved gap rather than claimed as full DO-authority cove
 
 ## Status
 
-Real, working code: `mix test` reports `77 tests, 0 failures, 3 skipped` (Elixir 1.19.0 / OTP 28.3), no mocks — real `Ash.DataLayer.Ets`
+Real, working code: the suite declares `112` tests (counted with
+`grep -rc 'test "' test/ --include='*.exs'`; wasm-backed tests skip with an
+explicit named skip when `WASM4PM_EX4PM_WASM` is unset), no mocks — real
+`Ash.DataLayer.Ets`
 resources, real `AshEx4pm.Notifier` firing, real calls into `ex4pm`'s running
-`Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. This release includes 10 real hardening
+`Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. Earlier releases in the 26.9.x
+line included 10 real hardening
 fixes from an adversarial Ash-maintainer-style review, all covered by the real tests
 above (not asserted, exercised):
 

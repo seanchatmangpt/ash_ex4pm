@@ -1,7 +1,7 @@
 defmodule AshEx4pm.MixProject do
   use Mix.Project
 
-  @version "26.9.10"
+  @version "26.10.1"
   @source_url "https://github.com/seanchatmangpt/ash_ex4pm"
 
   def project do
@@ -45,11 +45,11 @@ defmodule AshEx4pm.MixProject do
     [
       {:ash, "~> 3.0"},
       {:spark, "~> 2.2"},
-      # Hex release ex4pm 26.9.30 (hex.pm/packages/ex4pm/26.9.30, checksum
-      # 61ce3a46e7f33621386cfa719d4d23da8aa59a6a29de607188447d980e1f6e0b).
+      # Hex release ex4pm 26.10.1 (hex.pm/packages/ex4pm/26.10.1, checksum
+      # b42dd8d63b11fea76b10bb8f84503635f8ee0e6e6851cd7a8102759650c93be6).
       # Exact-pinned: ex4pm's third CalVer component carries contract
       # changes (each release's CHANGELOG declares its public contract).
-      {:ex4pm, "== 26.9.30"},
+      {:ex4pm, "== 26.10.1"},
       {:igniter, "~> 0.5", optional: true},
       # ggen_igniter drives this repo's own admitted-ferroplan-capability
       # generation unit (mix ash_ex4pm.ggen.sync) -- see
