@@ -18,6 +18,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   loading declared `object_relationship` targets that the triggering action
   did not already select/load, so they are no longer silently omitted from
   the emitted OCEL envelope.
+- **`AshEx4pm.Changes.ReceiptedAction`** (f1adb10): outermost `around_action`
+  running the whole in-transaction pipeline (before_action hooks, data-layer
+  write, after_action hooks) as `Ex4pm.Evidence.BRCE.execute/5`'s fun, so the
+  outcome receipt's `artifact_hash` is the sha256 of the real consequence
+  (resource, action, primary key, changed attributes); a failed write yields a
+  `:blocked` outcome receipt. Adds `idempotency_key` (same key + fingerprint
+  returns the sealed result as `:known_replay` without mutating; a different
+  fingerprint is refused `{:idempotency_conflict, key}`), `expected_subject`
+  (mismatch refused `{:stale_subject, expected, actual}` before mutation),
+  `operation: :local` (receipted, authority `:none`), the
+  `AshEx4pm.ReceiptStore` behaviour with an ETS implementation, and
+  `AshEx4pm.Errors.Refused`. Result metadata `:ash_ex4pm_receipt` carries
+  subject/authority/consequence/replay/standing. Merged via `735ab7c`.
+- **Strict economic ISA adapter** (69a3feb, 0bec77e): `AshEx4pm.EconomicISA`
+  adapter for the canonical economic ISA, with a test qualifying its strict
+  boundary (`test/ash_ex4pm/economic_isa_test.exs`). Integrated via PR #1
+  (64a2150).
+- **Ferroplan capability generation via `ggen_igniter`** (59eb76f, dc5f4dd):
+  `mix ash_ex4pm.ggen.sync`, `priv/ggen/manifest.json` and generated
+  `AshEx4pm.Ferroplan`, a thin delegate to `Ex4pm.Engine.Beam4pm.execute/3`
+  (empty function list while ex4pm's ferroplan individuals remain
+  `forward_declared`); `ggen_igniter` is a `:dev`/`:test` dependency only.
+  Qualified by an ExUnit court (dc5f4dd).
+- **sa2a-diataxis repository manifest** (f0a5567): `.sa2a/manifest.json`.
+
+### Fixed
+
+- **Notifier emits relationships loaded on `notification.data`** (8ea0c32):
+  the set of emitted relationships is the union of changeset-managed
+  relationship names and every resource relationship that is loaded (explicit
+  load or `load/2`); objects and event relationships are deduplicated.
+  Covered by an ex4pm validator round-trip test and an explicit-load test.
+- **Merged attribute-history tests opt in to
+  `track_attribute_changes?: true`** (146f423), matching mainline's opt-in
+  semantics for changed-attribute capture.
+- **`object_type` attribute types validated at compile time; dead
+  `compiled.context` removed; `track_attribute_changes?` exercised**
+  (6c387f8). `AshEx4pm.ObjectType` moduledoc corrected to state what
+  `Transformers.Persist` actually checks.
+
+### Changed
+
+- **Duplicated validation/lookup logic collapsed** in `persist.ex`,
+  `notifier.ex` and `verify.ex` with no behavior change (e96c2f0).
+- **Test suite status**: `mix test` reports `77 tests, 0 failures, 3 skipped`
+  (Elixir 1.19.0 / OTP 28.3, run on 2026-09-30 at the working tree above
+  `735ab7c`).
 
 ## [26.9.10] - 2026-09-10
 

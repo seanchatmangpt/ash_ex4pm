@@ -139,7 +139,7 @@ honestly as a real, unresolved gap rather than claimed as full DO-authority cove
 
 ## Status
 
-Real, working code: 50/50 tests passing (`mix test`), no mocks — real `Ash.DataLayer.Ets`
+Real, working code: `mix test` reports `77 tests, 0 failures, 3 skipped` (Elixir 1.19.0 / OTP 28.3), no mocks — real `Ash.DataLayer.Ets`
 resources, real `AshEx4pm.Notifier` firing, real calls into `ex4pm`'s running
 `Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. This release includes 10 real hardening
 fixes from an adversarial Ash-maintainer-style review, all covered by the real tests
