@@ -19,7 +19,7 @@ jobs:
       HEX_CACERTS_PATH: /etc/ssl/certs/ca-certificates.crt
       # RustlerPrecompiled consumes the exact locked Explorer NIF from this
       # pre-populated cache, avoiding OTP :httpc's release-assets TLS edge.
-      RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH: ${{ runner.temp }}/rustler_precompiled
+      RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH: /tmp/rustler_precompiled
     strategy:
       fail-fast: false
       matrix:
