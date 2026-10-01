@@ -4,6 +4,38 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [26.10.2] - 2026-10-01
+
+Documentation and capability-surface release. No new wasm4pm or ferroplan
+semantics are implemented in AshEx4pm.
+
+### Added
+
+- AshEx4pm.Capability and AshEx4pm.Capabilities: a machine-readable projection
+  registry recording semantic owner, Ash projection, operation/arity,
+  OBSERVE/ANALYZE/CONSTRUCT/ADMIT/DO boundary, authority semantics,
+  consequential-DO capability, optional inspection-only standing probe, and
+  canonical documentation.
+- Public AshEx4pm.capabilities/1, capability/1 and capability_standing/1.
+- Federated Diátaxis index plus tutorial, how-to, reference and explanation
+  entrypoints that route to canonical ex4pm, wasm4pm and ferroplan docs.
+- Registry courts for unique IDs, real exported projections, documentation
+  coverage, and planning/DO separation.
+
+### Changed
+
+- README now represents the already-shipped WasmRuntime, FerroplanRuntime and
+  FerroplanSessions surfaces instead of presenting the package as only an OCEL
+  notifier plus admission gate.
+- Corrected the stale BRCE scope statement: BrceGate remains admission-only,
+  while ReceiptedAction already runs the real Ash mutation inside
+  Ex4pm.Evidence.BRCE.execute/5 and binds the consequence to the outcome
+  receipt. The remaining unverified boundary is transactional commit failure
+  after around_action returns.
+- Package version bumped to 26.10.2. The exact published ex4pm 26.10.1 pin is
+  intentionally unchanged; this release does not invent compatibility with an
+  unverified upstream contract.
+
 ## [26.10.1] - 2026-10-01
 
 Release aligned with `ex4pm` 26.10.1 — the published Hex release that removes
