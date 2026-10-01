@@ -462,7 +462,7 @@ defmodule AshEx4pmTest do
     # (Ash's own change tracking, not something this test fabricates).
     assert changeset.attributes[:status] == :shipped
 
-    activity = %AshEx4pm.Activity{name: :order_shipped, on: :ship, resource: Order}
+    activity = %AshEx4pm.Activity{name: :order_shipped, on: :ship, resource: Order, track_attribute_changes?: true}
 
     notification = %Ash.Notifier.Notification{
       resource: Order,
@@ -572,7 +572,12 @@ defmodule AshEx4pmTest do
       |> Ash.Changeset.for_create(:create, %{status: :pending})
       |> Ash.create()
 
-    activity = %AshEx4pm.Activity{name: :order_relabeled, on: :relabel, resource: Order}
+    activity = %AshEx4pm.Activity{
+      name: :order_relabeled,
+      on: :relabel,
+      resource: Order,
+      track_attribute_changes?: true
+    }
 
     # Real update #1: a real Ash.Changeset for a real :update action,
     # actually persisted via a real Ash.update/1 call against the
