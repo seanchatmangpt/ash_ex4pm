@@ -33,6 +33,10 @@ defmodule AshEx4pm.Test.Order do
       argument(:line_item, :map, allow_nil?: false)
       change(manage_relationship(:line_item, :line_items, type: :create))
     end
+
+    update :relabel do
+      accept([:status])
+    end
   end
 
   attributes do

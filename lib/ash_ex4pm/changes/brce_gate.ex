@@ -52,19 +52,23 @@ defmodule AshEx4pm.Changes.BrceGate do
   `Ex4pm.Evidence.Store` rather than collapsing into one identical
   audit subject.
 
-  ## Honest scope limitation
+  ## Scope limitation -- and the receipted path that closes it
 
   `BRCE.execute/4`'s `fun` argument here is a pure admission placeholder
   (`fn -> :admitted end`), not the real database write -- Ash's own
   action pipeline performs the actual mutation separately, after this
-  `before_action` hook returns. This means BRCE's outcome receipt
-  reflects real ADMISSION success/failure, not real DB-write
-  success/failure; a DB error after admission is not captured in the
-  BRCE receipt chain. Wrapping the real Ash mutation itself inside
-  `fun` would require calling into Ash's changeset-apply internals from
-  a `before_action` hook, which was not attempted this pass -- named
-  honestly as a real, unresolved gap rather than silently claimed as
-  full DO-authority coverage.
+  `before_action` hook returns. This gate's outcome receipt therefore
+  reflects ADMISSION success/failure only; a DB error after admission is
+  not captured in its receipt chain.
+
+  When the receipt must bind the real consequence, use
+  `AshEx4pm.Changes.ReceiptedAction` instead: it wraps the real mutation
+  (before_action hooks, data-layer write, after_action hooks) inside
+  `BRCE.execute/5`'s `fun` via an outermost `around_action`, so the
+  outcome receipt's `artifact_hash` is the digest of the real resulting
+  record, a failed write yields a `:blocked` outcome receipt, and it adds
+  idempotent replay, stale-subject refusal and authority-free `:local`
+  receipting. `BrceGate` stays as the lighter admission-only gate.
   """
   use Ash.Resource.Change
 
@@ -116,7 +120,10 @@ defmodule AshEx4pm.Changes.BrceGate do
     })
   end
 
-  defp authority_for(changeset, opts, context) do
+  @doc false
+  # Shared with `AshEx4pm.Changes.ReceiptedAction` so both seams derive
+  # authority from the real actor identically.
+  def authority_for(changeset, opts, context) do
     case Keyword.get(opts, :authority_from) do
       fun when is_function(fun, 1) ->
         fun.(changeset)

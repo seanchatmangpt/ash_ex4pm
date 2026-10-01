@@ -4,6 +4,21 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **CI workflow** (d2c9e0c): `mix test` on push to `main` and on every
+  `pull_request`, OTP 27.1 / Elixir 1.17.3 on `ubuntu-24.04`, with
+  dep/build caching keyed on `mix.lock`. All dependencies resolve from Hex
+  per `mix.lock` (77 hex entries, no git or path deps), so CI verifies the
+  same dependency closure a consumer receives.
+- **`Ash.Notifier.load/2` implementation** (d4ffb71): `AshEx4pm.Notifier`
+  implements Ash 3.x's optional notifier `load/2` callback, proactively
+  loading declared `object_relationship` targets that the triggering action
+  did not already select/load, so they are no longer silently omitted from
+  the emitted OCEL envelope.
+
 ## [26.9.10] - 2026-09-10
 
 Merge pass over the OCEL 2.0-fidelity swarm's branches (base `9982bfa`),

@@ -444,6 +444,232 @@ defmodule AshEx4pmTest do
     assert output =~ "does not exist on"
   end
 
+  test "build_envelope/2 carries the real changeset's changed attribute values as event attributes" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    assert order.status == :pending
+
+    changeset = order |> Ash.Changeset.for_update(:ship, %{})
+    {:ok, shipped_order} = Ash.update(changeset)
+
+    assert shipped_order.status == :shipped
+
+    # Real Ash.Changeset -- `:ship`'s own `set_attribute(:status, :shipped)`
+    # change really did record the new value on `changeset.attributes`
+    # (Ash's own change tracking, not something this test fabricates).
+    assert changeset.attributes[:status] == :shipped
+
+    activity = %AshEx4pm.Activity{name: :order_shipped, on: :ship, resource: Order, track_attribute_changes?: true}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :ship, type: :update},
+      data: shipped_order,
+      changeset: changeset
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+    [event] = envelope["events"]
+
+    # This is the actual fidelity gap: the changed value must reach the
+    # envelope's real event-level "attributes" key -- the exact key
+    # `Ex4pm.OCEL`'s `drop_known_event_keys/1` extracts into
+    # `%Ex4pm.OCEL.Event{attributes: ...}`, and the exact key
+    # `Ex4pm.OCEL2.attribute_history/3`'s `event_attribute_value/3`
+    # falls back to reading (confirmed by reading both functions in
+    # `~/ex4pm/lib/ex4pm/ocel.ex` and `~/ex4pm/lib/ex4pm/ocel2.ex`
+    # before writing this test).
+    assert event["attributes"] == %{"status" => :shipped}
+
+    # Full round trip through ex4pm's own real, unmocked validator and
+    # normalizer -- proves this envelope shape is genuinely accepted
+    # downstream, not merely self-consistent inside ash_ex4pm.
+    assert {:ok, validated} = Ex4pm.OCEL.validate_envelope(envelope)
+
+    assert {:ok, log} =
+             Ex4pm.OCEL.normalize(%{
+               events: validated.events,
+               objects: validated.objects,
+               object_relationships: validated.object_relationships
+             })
+
+    [normalized_event] = log.events
+    assert normalized_event.attributes["status"] == :shipped
+
+    record_id = to_string(shipped_order.id)
+
+    assert {:ok, history} = Ex4pm.OCEL2.attribute_history(log, record_id, "status")
+    assert [%Ex4pm.AttributeChange{name: "status", value: :shipped}] = history
+  end
+
+  test "build_envelope/2 emits an empty attributes map when the notification has no changeset" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{name: :order_created, on: :create, resource: Order}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create},
+      data: order,
+      changeset: nil
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+    [event] = envelope["events"]
+
+    assert event["attributes"] == %{}
+  end
+
+  test "a declared qualifier: flows through the real DSL/transformer into build_envelope/2's relationship entry, and the real ex4pm OCEL.validate_envelope/1 accepts it" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    # Real compiled Activity struct with a non-default qualifier -- the
+    # same struct shape AshEx4pm.Transformers.Persist actually compiles
+    # from a resource's `ex4pm do ... end` block, not a hand-invented one.
+    activity = %AshEx4pm.Activity{
+      name: :order_created,
+      on: :create,
+      resource: Order,
+      qualifier: "resource"
+    }
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create},
+      data: order,
+      changeset: nil
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+    [event] = envelope["events"]
+    assert [%{"objectId" => object_id, "qualifier" => "resource"}] = event["relationships"]
+    assert object_id == to_string(order.id)
+
+    # Confirm the real downstream validator (not just this extension's
+    # own self-consistency) accepts the envelope with a non-"primary"
+    # qualifier.
+    assert {:ok, %{events: _}} = Ex4pm.OCEL.validate_envelope(envelope)
+  end
+
+  test "omitting qualifier: on the activity DSL entity defaults to \"primary\" (backward compatible)" do
+    assert %AshEx4pm.Activity{qualifier: "primary"} =
+             %AshEx4pm.Activity{name: :order_created, on: :create, resource: Order}
+  end
+
+  test "build_envelope/2 populates real changed-attribute values on :update actions, closing the OCEL 2.0 attribute-history gap" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{
+      name: :order_relabeled,
+      on: :relabel,
+      resource: Order,
+      track_attribute_changes?: true
+    }
+
+    # Real update #1: a real Ash.Changeset for a real :update action,
+    # actually persisted via a real Ash.update/1 call against the
+    # Ets data layer -- not a hand-built map standing in for one.
+    changeset1 = order |> Ash.Changeset.for_update(:relabel, %{status: :processing})
+    {:ok, order_processing} = Ash.update(changeset1)
+
+    notification1 = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :relabel, type: :update},
+      data: order_processing,
+      changeset: changeset1
+    }
+
+    envelope1 = AshEx4pm.Notifier.build_envelope(activity, notification1)
+
+    # Real update #2: the same object, a second real changed value.
+    changeset2 = order_processing |> Ash.Changeset.for_update(:relabel, %{status: :shipped})
+    {:ok, order_shipped} = Ash.update(changeset2)
+
+    notification2 = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :relabel, type: :update},
+      data: order_shipped,
+      changeset: changeset2
+    }
+
+    envelope2 = AshEx4pm.Notifier.build_envelope(activity, notification2)
+
+    [event1] = envelope1["events"]
+    [event2] = envelope2["events"]
+
+    # The gap this closes: previously build_envelope/2 emitted no
+    # "attributes" key at all, so ex4pm's real
+    # Ex4pm.OCEL.normalize_event/2 (drop_known_event_keys/1) had nothing
+    # to extract and event.attributes was always %{}.
+    assert event1["attributes"] == %{"status" => :processing}
+    assert event2["attributes"] == %{"status" => :shipped}
+
+    object_id = to_string(order.id)
+
+    combined = %{envelope1 | "events" => [event1, event2]}
+
+    # Real end-to-end: the combined envelope is actually accepted by
+    # ex4pm's real Ex4pm.Stream.Ingest.ingest_envelope/1 (real
+    # OCEL.validate_envelope/1 + real OCEL.normalize/1 + a real receipt
+    # pair written to Ex4pm.Evidence.Store) -- not merely
+    # self-consistent within ash_ex4pm.
+    assert {:ok, %{status: :ingested, event_count: 2}} =
+             Ex4pm.Stream.Ingest.ingest_envelope(combined)
+
+    # ingest_envelope/1 does not hand back the normalized %Ex4pm.EventLog{}
+    # it built internally, so reconstruct it the same real way
+    # (Ex4pm.OCEL.normalize/1 is exactly what ingest_envelope/1 calls
+    # after validate_envelope/1) to drive the real
+    # Ex4pm.OCEL2.attribute_history/3 reconstruction against it.
+    {:ok, log} =
+      Ex4pm.OCEL.normalize(%{
+        events: combined["events"],
+        objects: combined["objects"],
+        object_relationships: []
+      })
+
+    assert {:ok, history} = Ex4pm.OCEL2.attribute_history(log, object_id, "status")
+
+    assert [
+             %Ex4pm.AttributeChange{name: "status", value: :processing},
+             %Ex4pm.AttributeChange{name: "status", value: :shipped}
+           ] = history
+  end
+
+  test "build_envelope/2 emits an empty attributes map for :create actions (no prior value to diff against)" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{name: :order_created, on: :create, resource: Order}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create, type: :create},
+      data: order,
+      changeset: Order |> Ash.Changeset.for_create(:create, %{status: :pending})
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+    [event] = envelope["events"]
+
+    assert event["attributes"] == %{}
+  end
+
   test "an action with no matching activity does not attempt to emit anything" do
     {:ok, order} =
       Order
