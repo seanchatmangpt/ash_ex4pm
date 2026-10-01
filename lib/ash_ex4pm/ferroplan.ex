@@ -16,7 +16,8 @@ defmodule AshEx4pm.Ferroplan do
 
   Generated functions:
 
-
+      * `ferroplan_fond_policy/2` -> `Ex4pm.Engine.Beam4pm.execute(:ferroplan_fond_policy, subject, opts)` (planning type `Fond`) (forward_declared)
+    * `ferroplan_hierarchical_plan/2` -> `Ex4pm.Engine.Beam4pm.execute(:ferroplan_hierarchical_plan, subject, opts)` (planning type `Hierarchical`) (forward_declared)
 
   ## Honest status
 
@@ -26,4 +27,26 @@ defmodule AshEx4pm.Ferroplan do
   `json_api` route -- see `Ex4pm.Engine.Beam4pm`'s own moduledoc for the
   full disclosure.
   """
+
+  @doc """
+  Delegates to `Ex4pm.Engine.Beam4pm.execute(:ferroplan_fond_policy, subject, opts)` --
+  ferroplan's Fond planning capability, admitted as an
+  ex4pmb:AdmittedBeam4pmService individual. Status: `forward_declared`.
+  """
+  @spec ferroplan_fond_policy(map(), keyword()) ::
+          {:ok, Ex4pm.Engine.Result.t()} | {:error, Ex4pm.Refusal.t()}
+  def ferroplan_fond_policy(subject, opts \\ []) do
+    Ex4pm.Engine.Beam4pm.execute(:ferroplan_fond_policy, subject, opts)
+  end
+
+  @doc """
+  Delegates to `Ex4pm.Engine.Beam4pm.execute(:ferroplan_hierarchical_plan, subject, opts)` --
+  ferroplan's Hierarchical planning capability, admitted as an
+  ex4pmb:AdmittedBeam4pmService individual. Status: `forward_declared`.
+  """
+  @spec ferroplan_hierarchical_plan(map(), keyword()) ::
+          {:ok, Ex4pm.Engine.Result.t()} | {:error, Ex4pm.Refusal.t()}
+  def ferroplan_hierarchical_plan(subject, opts \\ []) do
+    Ex4pm.Engine.Beam4pm.execute(:ferroplan_hierarchical_plan, subject, opts)
+  end
 end

@@ -21,14 +21,15 @@ defmodule AshEx4pm.EconomicISA do
 
   @required_contract [
     registry: 0,
-    unknown: 0,
-    escape: 0,
-    lookup_byte: 1,
-    lookup_activity: 1,
+    ranges: 0,
+    unknown_opcode: 0,
+    escape_opcode: 0,
+    lookup: 1,
     category: 1,
     encode: 1,
+    encode_extended: 1,
     decode: 1,
-    to_event: 3
+    to_event: 2
   ]
 
   @type standing :: :alive | :partial_alive
@@ -78,43 +79,65 @@ defmodule AshEx4pm.EconomicISA do
     end
   end
 
-  @doc "Fetch the canonical registry. Result is wrapped so dependency refusal is explicit."
-  @spec registry() :: {:ok, map()} | {:error, refusal()}
+  @doc "Fetch the canonical registry (list of `%{name, opcode, category}`)."
+  @spec registry() :: {:ok, [map()]} | {:error, refusal()}
   def registry do
     with_provider(fn -> {:ok, apply(@provider, :registry, [])} end)
   end
 
+  @doc "Canonical category ranges."
+  @spec ranges() :: {:ok, term()} | {:error, refusal()}
+  def ranges do
+    with_provider(fn -> {:ok, apply(@provider, :ranges, [])} end)
+  end
+
   @spec unknown() :: {:ok, non_neg_integer()} | {:error, refusal()}
   def unknown do
-    with_provider(fn -> {:ok, apply(@provider, :unknown, [])} end)
+    with_provider(fn -> {:ok, apply(@provider, :unknown_opcode, [])} end)
   end
 
   @spec escape() :: {:ok, non_neg_integer()} | {:error, refusal()}
   def escape do
-    with_provider(fn -> {:ok, apply(@provider, :escape, [])} end)
+    with_provider(fn -> {:ok, apply(@provider, :escape_opcode, [])} end)
   end
 
   @spec lookup_byte(non_neg_integer()) :: {:ok, atom()} | {:error, term()}
-  def lookup_byte(byte) do
-    with_provider(fn -> apply(@provider, :lookup_byte, [byte]) end)
+  def lookup_byte(byte) when is_integer(byte) do
+    with_provider(fn ->
+      case apply(@provider, :lookup, [byte]) do
+        {:ok, %{name: name}} -> {:ok, name}
+        :error -> {:error, {:unknown_economic_opcode, byte}}
+      end
+    end)
   end
 
-  @spec lookup_activity(atom() | String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def lookup_activity(activity) do
-    with_provider(fn -> apply(@provider, :lookup_activity, [activity]) end)
+  @spec lookup_activity(atom()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def lookup_activity(activity) when is_atom(activity) do
+    with_provider(fn ->
+      case apply(@provider, :lookup, [activity]) do
+        {:ok, %{opcode: opcode}} -> {:ok, opcode}
+        :error -> {:error, {:unknown_economic_activity, activity}}
+      end
+    end)
   end
 
-  @spec category(non_neg_integer()) :: atom() | {:error, term()}
+  @spec category(non_neg_integer()) :: {:ok, atom()} | {:error, term()}
   def category(byte) do
-    with_provider(fn -> apply(@provider, :category, [byte]) end)
+    with_provider(fn -> {:ok, apply(@provider, :category, [byte])} end)
   end
 
+  @doc "Encode an activity name to its canonical frame; `{:extended, id}` uses the escape record."
   @spec encode(term()) :: {:ok, binary()} | {:error, term()}
+  def encode({:extended, semantic_id}) do
+    with_provider(fn -> apply(@provider, :encode_extended, [semantic_id]) end)
+  end
+
   def encode(activity) do
     with_provider(fn -> apply(@provider, :encode, [activity]) end)
   end
 
-  @spec decode(binary()) :: {:ok, term()} | {:error, term()}
+  @doc "Decode a frame to the canonical `%{name, opcode, category}` map (plus `semantic_id` for escapes)."
+  @spec decode(binary()) :: {:ok, map()} | {:error, term()}
   def decode(frame) when is_binary(frame) do
     with_provider(fn -> apply(@provider, :decode, [frame]) end)
   end
@@ -124,11 +147,14 @@ defmodule AshEx4pm.EconomicISA do
 
   This remains an observation/manufacturing operation only.  It does not grant
   an Ash action, planner, notifier, model, or caller external DO authority.
+  Extra `opts` (`:object_ids`, `:relationships`, `:attributes`, `:provenance`,
+  `:authority`, `:value`) pass through to the canonical provider.
   """
-  @spec to_event(term(), String.t(), String.t(), keyword()) :: {:ok, term()} | {:error, term()}
+  @spec to_event(term(), String.t(), String.t() | DateTime.t(), keyword()) ::
+          {:ok, term()} | {:error, term()}
   def to_event(activity, event_id, timestamp, opts \\ []) do
     with_provider(fn ->
-      apply(@provider, :to_event, [activity, event_id, timestamp, opts])
+      apply(@provider, :to_event, [activity, [id: event_id, timestamp: timestamp] ++ opts])
     end)
   end
 
@@ -146,30 +172,24 @@ defmodule AshEx4pm.EconomicISA do
     end
   end
 
-  defp project_decoded({:fixed, byte, canonical_activity}, frame) do
-    case category(byte) do
-      {:error, _} = error ->
-        error
-
-      category ->
-        {:ok,
-         %{
-           opcode: byte,
-           activity: canonical_activity,
-           category: category,
-           semantic_id: nil,
-           frame: frame
-         }}
-    end
-  end
-
-  defp project_decoded({:extended, semantic_id}, frame) do
+  defp project_decoded(%{semantic_id: semantic_id, opcode: opcode, category: category}, frame) do
     {:ok,
      %{
-       opcode: 0xFF,
+       opcode: opcode,
        activity: :extended,
-       category: :escape,
+       category: category,
        semantic_id: semantic_id,
+       frame: frame
+     }}
+  end
+
+  defp project_decoded(%{name: name, opcode: opcode, category: category}, frame) do
+    {:ok,
+     %{
+       opcode: opcode,
+       activity: name,
+       category: category,
+       semantic_id: nil,
        frame: frame
      }}
   end
