@@ -526,6 +526,46 @@ defmodule AshEx4pmTest do
     assert event["attributes"] == %{}
   end
 
+  test "a declared qualifier: flows through the real DSL/transformer into build_envelope/2's relationship entry, and the real ex4pm OCEL.validate_envelope/1 accepts it" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    # Real compiled Activity struct with a non-default qualifier -- the
+    # same struct shape AshEx4pm.Transformers.Persist actually compiles
+    # from a resource's `ex4pm do ... end` block, not a hand-invented one.
+    activity = %AshEx4pm.Activity{
+      name: :order_created,
+      on: :create,
+      resource: Order,
+      qualifier: "resource"
+    }
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create},
+      data: order,
+      changeset: nil
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+
+    [event] = envelope["events"]
+    assert [%{"objectId" => object_id, "qualifier" => "resource"}] = event["relationships"]
+    assert object_id == to_string(order.id)
+
+    # Confirm the real downstream validator (not just this extension's
+    # own self-consistency) accepts the envelope with a non-"primary"
+    # qualifier.
+    assert {:ok, %{events: _}} = Ex4pm.OCEL.validate_envelope(envelope)
+  end
+
+  test "omitting qualifier: on the activity DSL entity defaults to \"primary\" (backward compatible)" do
+    assert %AshEx4pm.Activity{qualifier: "primary"} =
+             %AshEx4pm.Activity{name: :order_created, on: :create, resource: Order}
+  end
+
   test "an action with no matching activity does not attempt to emit anything" do
     {:ok, order} =
       Order
