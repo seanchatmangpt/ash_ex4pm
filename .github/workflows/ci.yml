@@ -25,7 +25,7 @@ jobs:
         with:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
-          mix-rebar: false
+          install-rebar: false
 
       - uses: actions/cache@v4
         with:
