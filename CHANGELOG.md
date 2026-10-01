@@ -4,20 +4,127 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [26.10.1] - 2026-10-01
+
+Release aligned with `ex4pm` 26.10.1 — the published Hex release that removes
+all beam4pm knowledge from `ex4pm` (ex4pm `2fd3a21`): `Ex4pm.Engine.Beam4pm`
+no longer exists upstream. Folds all previously-unreleased work since 26.9.10.
 
 ### Added
 
-- **CI workflow** (d2c9e0c): `mix test` on push to `main` and on every
-  `pull_request`, OTP 27.1 / Elixir 1.17.3 on `ubuntu-24.04`, with
-  dep/build caching keyed on `mix.lock`. All dependencies resolve from Hex
-  per `mix.lock` (77 hex entries, no git or path deps), so CI verifies the
-  same dependency closure a consumer receives.
+- **Live ex4pm runtime seams** (new modules; each owns no semantics, delegates
+  to its ex4pm provider, and refuses typed when the installed ex4pm lacks the
+  required contract — candidates only, no DO authority):
+  - `AshEx4pm.WasmRuntime` — Ash-facing adapter over ex4pm's bundled wasm
+    engines (wasm4pm statistics, forecasting, and ferroplan); every call on a
+    missing contract is a typed `:wasm_runtime_unavailable` refusal with
+    standing `:partial_alive`; `standing/0` is evidence-bounded from
+    `Ex4pm.health(probe: false)`.
+  - `AshEx4pm.FerroplanRuntime` — the live planning path over
+    `Ex4pm.Engine.Ferroplan`; typed `:ferroplan_runtime_unavailable` refusals.
+  - `AshEx4pm.FerroplanSessions` — seam over `Ex4pm.Engine.Ferroplan.Sessions`,
+    ex4pm's stateful ferroplan session facade (one wasm instance per session);
+    typed `:ferroplan_session_runtime_unavailable` refusals; `info/1` strips
+    the opaque guest `:handle` and the `:transport` pid.
+  - `AshEx4pm.CallLogBridge` — GenServer bridging `Ex4pm.Engine.CallLog` into
+    an Ash-side process: subscribes to the call log, attaches a
+    `[:ex4pm, :engine, :call, :stop]` telemetry handler, ingests each envelope
+    through `Ex4pm.Stream.Ingest.ingest_envelope/2` into its own evidence
+    store (call-log sequence numbers are VM-global, so the bridge keeps its
+    own sequence space), and retains the last `:limit` call summaries; a
+    refused or failed ingestion is recorded in `stats/1` and never crashes
+    the bridge.
+  - `AshEx4pm.CapabilityProjection` — flat, storable projection of an
+    `Ex4pm.Engine.Result` (or typed refusal); `admitted` is true only when
+    standing is `:alive`, the wasm replay was verified, the artifact sha256 is
+    a binary, and the transport identity was observed. Everything else is a
+    projection, never authority.
+- **`AshEx4pm.EngineRun` + `AshEx4pm.EngineRunDomain` +
+  `AshEx4pm.Changes.RunEngine` + `AshEx4pm.Calculations`** — an ETS-backed Ash
+  resource recording one real ex4pm analytical run per create action
+  (`:discover | :conform | :simulate | :optimize | :plan`) through the
+  CONSTRUCT-only `RunEngine` change, persisting the resulting `%Ex4pm.Run{}`
+  envelope; refusals raise `AshEx4pm.Errors.Refused` and persist nothing;
+  `:by_receipt` reads by outcome receipt hash, and generic `:replay` /
+  `:capabilities` actions wrap `Ex4pm.replay/2` and `Ex4pm.capabilities/2`.
+  Calculations: `AshEx4pm.Calculations.Statistic` and
+  `.Forecast` run a real wasm4pm statistic / forecast over a numeric-array
+  attribute (the run's `value`, or `nil` on refusal); `.CapabilityProjection`
+  derives `admitted` from stored projection fields without re-executing the
+  engine.
+- **CI workflow** (d2c9e0c, upgraded by 0a7f44b): `mix verify` (`format
+  --check-formatted`, `compile --warnings-as-errors`, `test`) on push to
+  `main` and on every `pull_request`, OTP 27.1 / Elixir 1.17.3 on
+  `ubuntu-24.04`, with dep/build caching keyed on `mix.lock`. All
+  dependencies resolve from Hex per `mix.lock` (no git or path deps), so CI
+  verifies the same dependency closure a consumer receives.
 - **`Ash.Notifier.load/2` implementation** (d4ffb71): `AshEx4pm.Notifier`
   implements Ash 3.x's optional notifier `load/2` callback, proactively
   loading declared `object_relationship` targets that the triggering action
   did not already select/load, so they are no longer silently omitted from
   the emitted OCEL envelope.
+- **`AshEx4pm.Changes.ReceiptedAction`** (f1adb10): outermost `around_action`
+  running the whole in-transaction pipeline (before_action hooks, data-layer
+  write, after_action hooks) as `Ex4pm.Evidence.BRCE.execute/5`'s fun, so the
+  outcome receipt's `artifact_hash` is the sha256 of the real consequence
+  (resource, action, primary key, changed attributes); a failed write yields a
+  `:blocked` outcome receipt. Adds `idempotency_key` (same key + fingerprint
+  returns the sealed result as `:known_replay` without mutating; a different
+  fingerprint is refused `{:idempotency_conflict, key}`), `expected_subject`
+  (mismatch refused `{:stale_subject, expected, actual}` before mutation),
+  `operation: :local` (receipted, authority `:none`), the
+  `AshEx4pm.ReceiptStore` behaviour with an ETS implementation, and
+  `AshEx4pm.Errors.Refused`. Result metadata `:ash_ex4pm_receipt` carries
+  subject/authority/consequence/replay/standing. Merged via `735ab7c`.
+- **Strict economic ISA adapter** (69a3feb, 0bec77e): `AshEx4pm.EconomicISA`
+  adapter for the canonical economic ISA, with a test qualifying its strict
+  boundary (`test/ash_ex4pm/economic_isa_test.exs`). Integrated via PR #1
+  (64a2150).
+- **sa2a-diataxis repository manifest** (f0a5567): `.sa2a/manifest.json`.
+
+### Fixed
+
+- **Notifier emits relationships loaded on `notification.data`** (8ea0c32):
+  the set of emitted relationships is the union of changeset-managed
+  relationship names and every resource relationship that is loaded (explicit
+  load or `load/2`); objects and event relationships are deduplicated.
+  Covered by an ex4pm validator round-trip test and an explicit-load test.
+- **Merged attribute-history tests opt in to
+  `track_attribute_changes?: true`** (146f423), matching mainline's opt-in
+  semantics for changed-attribute capture.
+- **`object_type` attribute types validated at compile time; dead
+  `compiled.context` removed; `track_attribute_changes?` exercised**
+  (6c387f8). `AshEx4pm.ObjectType` moduledoc corrected to state what
+  `Transformers.Persist` actually checks.
+
+### Changed
+
+- **`ex4pm` exact-pin moved to the published Hex release 26.10.1.** `mix.exs`
+  pins `{:ex4pm, "== 26.10.1"}` (mix.lock checksum
+  `269ee75f8226945538ff0627fe5267210a08e951fa6289991e1d3d0bb110782c`), still
+  exact-pinned because
+  ex4pm's third CalVer component carries contract changes (each release's
+  CHANGELOG declares its public contract; see 26.9.9's entry below for the
+  original rationale). ex4pm 26.10.1 removes all beam4pm knowledge from ex4pm
+  (ex4pm `2fd3a21`): `Ex4pm.Engine.Beam4pm` and its A2A surface are gone
+  upstream, and ex4pm's locked dependency set drops its former `a2a` and
+  `req` dependencies accordingly.
+- **Live ferroplan runtime replaces the generated ferroplan projection.** The
+  ggen ferroplan generation unit introduced earlier in this cycle (59eb76f,
+  dc5f4dd: `mix ash_ex4pm.ggen.sync`, `priv/ggen/manifest.json`, generated
+  `AshEx4pm.Ferroplan` delegate) is retired in this release: the generated
+  `lib/ash_ex4pm/ferroplan.ex`, `priv/ggen/templates/ferroplan.ex.eex` and
+  `priv/ggen/queries/admitted_ferroplan_activities.rq` are deleted, and the
+  ferroplan surface is carried by the live `AshEx4pm.FerroplanRuntime` /
+  `AshEx4pm.FerroplanSessions` seams above (`priv/ggen/manifest.json`
+  remains). `mix test` asserts the retirement: neither `Ex4pm.Engine.Beam4pm`
+  nor `AshEx4pm.Ferroplan` loads.
+- **Duplicated validation/lookup logic collapsed** in `persist.ex`,
+  `notifier.ex` and `verify.ex` with no behavior change (e96c2f0).
+- **Test suite status**: the suite declares 112 `test` blocks across
+  `test/**/*.exs` (Elixir 1.20.4-otp-29 / Erlang/OTP 29.1.1, checked
+  2026-10-01); wasm-backed tests skip with an explicit named skip when
+  `WASM4PM_EX4PM_WASM` is unset.
 
 ## [26.9.10] - 2026-09-10
 
@@ -80,11 +187,12 @@ still Chicago-style throughout (no mocks).
   was adapted directly into `attribute_change_attributes/2` above
   rather than merged as a separate parallel code path.
 
-## [Unreleased] - 2026-09-09
+## [26.9.10] - 2026-09-09
 
 Hardening pass: 10 real fixes from an adversarial Ash-maintainer-style review,
 bringing the suite to 25/25 real tests passing (`test/ash_ex4pm_test.exs`), still
-Chicago-style throughout (no mocks).
+Chicago-style throughout (no mocks). This pass predates and shipped as part of
+the 26.9.10 release (above); its heading was mistakenly left `[Unreleased]`.
 
 ### Changed
 

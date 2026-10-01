@@ -1,0 +1,81 @@
+defmodule AshEx4pm.FerroplanRuntime do
+  @moduledoc """
+  Ash-facing adapter over `Ex4pm.Engine.Ferroplan`, the ferroplan runtime that
+  ex4pm (>= 26.9.30) owns and ships with its packaged wasm artifact.
+
+  This is the live path for planning.  ex4pm no longer forward-declares ferroplan
+  routes on `Ex4pm.Engine.Beam4pm` (removed in 26.10.1), so the former generated
+  `AshEx4pm.Ferroplan` unit is retired and this module carries the ferroplan surface.  It owns
+  no planner semantics; it delegates to the ex4pm provider, and if the installed
+  ex4pm lacks the contract every call is a typed
+  `:ferroplan_runtime_unavailable` refusal with standing `:partial_alive`.
+
+  Plans are candidates only.  This adapter grants no DO authority.
+  """
+
+  @provider Ex4pm.Engine.Ferroplan
+
+  @required_contract [plan: 4, plan_production: 4, readiness: 1, version: 1, wasm_built?: 0]
+
+  @type refusal :: {:ferroplan_runtime_unavailable, map()}
+
+  @doc "Canonical provider module (owned by ex4pm)."
+  @spec provider() :: module()
+  def provider, do: @provider
+
+  @doc "Provider surface this adapter requires."
+  @spec required_contract() :: keyword(non_neg_integer())
+  def required_contract, do: @required_contract
+
+  @doc "Required provider functions that are not exported (empty when fully available)."
+  @spec missing_contract() :: keyword(non_neg_integer())
+  def missing_contract do
+    if Code.ensure_loaded?(@provider) do
+      Enum.reject(@required_contract, fn {name, arity} ->
+        function_exported?(@provider, name, arity)
+      end)
+    else
+      @required_contract
+    end
+  end
+
+  @doc "True when ex4pm's ferroplan runtime exports the full required contract."
+  @spec available?() :: boolean()
+  def available?, do: missing_contract() == []
+
+  @doc "Evidence-bounded standing; wasm artifact presence is reported, never assumed."
+  @spec standing() :: {:alive | :partial_alive, map()}
+  def standing do
+    if available?() do
+      {:alive, %{provider: @provider, wasm_built?: apply(@provider, :wasm_built?, [])}}
+    else
+      {:partial_alive, %{provider: @provider, missing: missing_contract()}}
+    end
+  end
+
+  @doc "Classical solve (`Ex4pm.Engine.Ferroplan.plan/4`)."
+  @spec plan(String.t(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def plan(domain, problem, extra \\ %{}, opts \\ []) do
+    with_provider(fn -> apply(@provider, :plan, [domain, problem, extra, opts]) end)
+  end
+
+  @doc "Bounded, candidate-only production solve (`Ex4pm.Engine.Ferroplan.plan_production/4`)."
+  @spec plan_production(String.t(), String.t(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def plan_production(domain, problem, extra \\ %{}, opts \\ []) do
+    with_provider(fn -> apply(@provider, :plan_production, [domain, problem, extra, opts]) end)
+  end
+
+  @doc "Engine capability manifest and fingerprint."
+  @spec readiness(keyword()) :: {:ok, map()} | {:error, term()}
+  def readiness(opts \\ []), do: with_provider(fn -> apply(@provider, :readiness, [opts]) end)
+
+  defp with_provider(fun) do
+    if available?() do
+      fun.()
+    else
+      {:error,
+       {:ferroplan_runtime_unavailable, %{provider: @provider, missing: missing_contract()}}}
+    end
+  end
+end
