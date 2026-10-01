@@ -17,9 +17,9 @@ jobs:
       # RustlerPrecompiled fetches native artifacts. Reuse the runner's
       # system CA bundle instead of changing package/runtime semantics.
       HEX_CACERTS_PATH: /etc/ssl/certs/ca-certificates.crt
-      # Explorer's RustlerPrecompiled download hits the same OTP TLS edge;
-      # compile that one NIF locally instead of depending on release-assets TLS.
-      EXPLORER_BUILD: "1"
+      # RustlerPrecompiled consumes the exact locked Explorer NIF from this
+      # pre-populated cache, avoiding OTP :httpc's release-assets TLS edge.
+      RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH: ${{ runner.temp }}/rustler_precompiled
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +59,13 @@ jobs:
 
       - name: Install dependencies
         run: mix deps.get
+
+      - name: Prefetch locked Explorer NIF
+        run: |
+          mkdir -p "$RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH"
+          curl -fL --retry 3 --retry-all-errors \
+            -o "$RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH/libexplorer-v0.13.0-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz" \
+            "https://github.com/elixir-nx/explorer/releases/download/v0.13.0/libexplorer-v0.13.0-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz"
 
       - name: Verify (format, compile --warnings-as-errors, test)
         run: mix verify
