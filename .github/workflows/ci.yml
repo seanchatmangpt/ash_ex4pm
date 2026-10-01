@@ -66,6 +66,9 @@ jobs:
           curl -fL --retry 3 --retry-all-errors \
             -o "$RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH/libexplorer-v0.13.0-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz" \
             "https://github.com/elixir-nx/explorer/releases/download/v0.13.0/libexplorer-v0.13.0-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz"
+          curl -fL --retry 3 --retry-all-errors \
+            -o "$RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH/libwasmex-v0.15.1-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz" \
+            "https://github.com/tessi/wasmex/releases/download/v0.15.1/libwasmex-v0.15.1-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz"
 
       - name: Verify (format, compile --warnings-as-errors, test)
         run: mix verify
