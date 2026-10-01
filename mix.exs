@@ -1,7 +1,7 @@
 defmodule AshEx4pm.MixProject do
   use Mix.Project
 
-  @version "26.10.1"
+  @version "26.10.2"
   @source_url "https://github.com/seanchatmangpt/ash_ex4pm"
 
   def project do
@@ -81,7 +81,13 @@ defmodule AshEx4pm.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md"]
+      extras: [
+        "README.md",
+        "docs/INDEX.md",
+        "docs/reference/capabilities.md",
+        "docs/explanation/architecture.md",
+        "docs/PRD-ARD-v26.10.2.md"
+      ]
     ]
   end
 end
