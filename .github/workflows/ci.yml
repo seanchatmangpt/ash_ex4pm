@@ -25,7 +25,17 @@ jobs:
         with:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
+          # builds.hex.pm currently serves a cert OTP's TLS rejects
+          # (key_usage_mismatch); bootstrap hex/rebar3 from GitHub instead.
+          install-hex: false
           install-rebar: false
+
+      - name: Bootstrap hex and rebar3
+        run: |
+          mix archive.install github hexpm/hex branch latest --force
+          curl -fsSL -o /usr/local/bin/rebar3 https://github.com/erlang/rebar3/releases/latest/download/rebar3
+          chmod +x /usr/local/bin/rebar3
+          rebar3 --version
 
       - uses: actions/cache@v4
         with:
