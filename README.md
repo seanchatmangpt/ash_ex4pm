@@ -23,15 +23,16 @@ policy for its third CalVer component as of this writing, so a `~>` range cannot
 actually guarantee the compatibility it implies for a real SemVer package. This will
 be loosened once `ex4pm` publishes a real versioning policy for that component.
 
-`ash_ex4pm` itself depends on `ex4pm`. In this repo's own development, that dependency
-is a real path dependency (see this repo's own `mix.exs`):
+`ash_ex4pm` takes `ex4pm` from Hex: `mix.exs` pins the real, published,
+checksum-verifiable release `{:ex4pm, "== 26.9.9"}`
+([hex.pm/packages/ex4pm/26.9.9](https://hex.pm/packages/ex4pm/26.9.9)); it was a
+path dependency only during initial co-development (see this repo's git history).
+A path pin remains an alternative when developing against a sibling `ex4pm`
+checkout:
 
 ```elixir
 {:ex4pm, path: "../ex4pm"}
 ```
-
-A consumer app not developing alongside `ex4pm` in a sibling directory would instead
-take `ex4pm` from Hex once published, or its own `path:`/`git:` pin.
 
 ## Usage
 
@@ -138,7 +139,7 @@ honestly as a real, unresolved gap rather than claimed as full DO-authority cove
 
 ## Status
 
-Real, working code: 49/49 tests passing (`mix test`), no mocks — real `Ash.DataLayer.Ets`
+Real, working code: 50/50 tests passing (`mix test`), no mocks — real `Ash.DataLayer.Ets`
 resources, real `AshEx4pm.Notifier` firing, real calls into `ex4pm`'s running
 `Ex4pm.Evidence.Store` and `Ex4pm.Evidence.BRCE`. This release includes 10 real hardening
 fixes from an adversarial Ash-maintainer-style review, all covered by the real tests
