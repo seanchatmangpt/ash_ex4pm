@@ -3,29 +3,49 @@ defmodule AshEx4pm.FerroplanRuntimeTest do
 
   alias AshEx4pm.FerroplanRuntime
 
+  @domain "(define (domain d) (:requirements :strips) (:predicates (a) (b)) " <>
+            "(:action go :parameters () :precondition (a) :effect (and (b) (not (a)))))"
+  @problem "(define (problem p) (:domain d) (:init (a)) (:goal (b)))"
+  @unsolvable "(define (problem q) (:domain d) (:init) (:goal (b)))"
+
   test "owns no planner: provider is ex4pm's own Ex4pm.Engine.Ferroplan" do
     assert FerroplanRuntime.provider() == Ex4pm.Engine.Ferroplan
-    assert FerroplanRuntime.required_contract()[:plan_production] == 4
+    assert FerroplanRuntime.missing_contract() == []
+    assert FerroplanRuntime.available?()
   end
 
-  test "until ex4pm ships the ferroplan runtime every call is a typed refusal and standing is :partial_alive" do
-    unless FerroplanRuntime.available?() do
-      assert {:partial_alive, %{provider: Ex4pm.Engine.Ferroplan, missing: missing}} =
-               FerroplanRuntime.standing()
-
-      assert missing == FerroplanRuntime.required_contract()
-
-      assert {:error, {:ferroplan_runtime_unavailable, %{provider: Ex4pm.Engine.Ferroplan}}} =
-               FerroplanRuntime.plan("(define (domain d))", "(define (problem p))")
-
-      assert {:error, {:ferroplan_runtime_unavailable, _}} = FerroplanRuntime.readiness()
-    end
+  test "standing is :alive with the packaged wasm artifact present" do
+    assert {:alive, %{provider: Ex4pm.Engine.Ferroplan, wasm_built?: true}} =
+             FerroplanRuntime.standing()
   end
 
-  test "once ex4pm ships the ferroplan runtime readiness is delegated to the real engine" do
-    if FerroplanRuntime.available?() and apply(Ex4pm.Engine.Ferroplan, :wasm_built?, []) do
-      assert {:alive, %{wasm_built?: true}} = FerroplanRuntime.standing()
-      assert {:ok, %{} = _manifest} = FerroplanRuntime.readiness()
-    end
+  test "plan/4 solves a real PDDL problem through the packaged ferroplan wasm" do
+    assert {:ok, %{"solved" => true, "plan" => %{"length" => 1, "steps" => [step]}}} =
+             FerroplanRuntime.plan(@domain, @problem)
+
+    assert step["action"] == "GO"
+  end
+
+  test "plan/4 reports an unsolvable problem as unsolved, not a crash" do
+    assert {:ok, %{"solved" => false}} = FerroplanRuntime.plan(@domain, @unsolvable)
+  end
+
+  test "plan_production/4 returns a candidate-only operation envelope" do
+    assert {:ok, %{} = envelope} = FerroplanRuntime.plan_production(@domain, @problem)
+    assert map_size(envelope) > 0
+  end
+
+  test "readiness/1 returns the engine capability manifest" do
+    assert {:ok, %{} = manifest} = FerroplanRuntime.readiness()
+    assert map_size(manifest) > 0
+  end
+
+  test "a missing provider contract is a typed refusal, never a guess" do
+    assert FerroplanRuntime.required_contract() == [
+             plan: 4,
+             plan_production: 4,
+             readiness: 1,
+             version: 1
+           ]
   end
 end

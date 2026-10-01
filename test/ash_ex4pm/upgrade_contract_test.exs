@@ -5,12 +5,11 @@ defmodule AshEx4pm.UpgradeContractTest do
 
   alias AshEx4pm.Test.Order
 
-  test "generated ferroplan routes are forward_declared and refuse typed, not crash" do
-    assert {:error, %Ex4pm.Refusal{code: :beam4pm_route_not_live}} =
-             AshEx4pm.Ferroplan.ferroplan_fond_policy(%{})
+  test "ex4pm 26.9.30 no longer forward-declares ferroplan routes on Beam4pm" do
+    assert {:error, %Ex4pm.Refusal{code: :beam4pm_unsupported_operation}} =
+             Ex4pm.Engine.Beam4pm.execute(:ferroplan_fond_policy, %{}, [])
 
-    assert {:error, %Ex4pm.Refusal{code: :beam4pm_route_not_live}} =
-             AshEx4pm.Ferroplan.ferroplan_hierarchical_plan(%{})
+    refute function_exported?(AshEx4pm.Ferroplan, :ferroplan_fond_policy, 2)
   end
 
   test "re-ingesting a byte-identical envelope is ignored with the original receipt hash" do

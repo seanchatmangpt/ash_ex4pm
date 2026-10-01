@@ -45,12 +45,11 @@ defmodule AshEx4pm.MixProject do
     [
       {:ash, "~> 3.0"},
       {:spark, "~> 2.2"},
-      # Path dependency on the canonical ~/ex4pm checkout (v26.9.30, 345
-      # commits past the only published release, Hex 26.9.9). Hex has no
-      # newer release and the HEAD SHA is not on the remote, so a Hex or
-      # git pin is unavailable (checked hex.pm/api/packages/ex4pm). Switch
-      # back to `{:ex4pm, "== 26.9.30"}` once ex4pm publishes it.
-      {:ex4pm, path: "../ex4pm"},
+      # Hex release ex4pm 26.9.30 (hex.pm/packages/ex4pm/26.9.30, checksum
+      # 61ce3a46e7f33621386cfa719d4d23da8aa59a6a29de607188447d980e1f6e0b).
+      # Exact-pinned: ex4pm's third CalVer component carries contract
+      # changes (each release's CHANGELOG declares its public contract).
+      {:ex4pm, "== 26.9.30"},
       {:igniter, "~> 0.5", optional: true},
       # ggen_igniter drives this repo's own admitted-ferroplan-capability
       # generation unit (mix ash_ex4pm.ggen.sync) -- see

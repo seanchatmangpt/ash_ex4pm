@@ -1,17 +1,14 @@
 defmodule AshEx4pm.FerroplanRuntime do
   @moduledoc """
-  Ash-facing adapter over `Ex4pm.Engine.Ferroplan`, the canonical ferroplan
-  runtime that ex4pm owns.
+  Ash-facing adapter over `Ex4pm.Engine.Ferroplan`, the ferroplan runtime that
+  ex4pm (>= 26.9.30) owns and ships with its packaged wasm artifact.
 
-  ex4pm must carry the runtime itself, not forward-declared route stubs: the
-  generated `AshEx4pm.Ferroplan` routes go through `Ex4pm.Engine.Beam4pm`, whose
-  ferroplan routes are still `forward_declared` (typed `:beam4pm_route_not_live`).
-  This module is the live path.  It owns no planner semantics; it delegates to
-  the ex4pm provider once the installed ex4pm exports the full contract, and
-  until then every call is a typed `:ferroplan_runtime_unavailable` refusal with
-  standing `:partial_alive`.  The contract mirrors the operation surface of the
-  existing wasm-backed planner in `~/beam4pm` (`BeamPM.Ferroplan`) so that
-  runtime can be ported into ex4pm unchanged.
+  This is the live path for planning.  ex4pm no longer forward-declares ferroplan
+  routes on `Ex4pm.Engine.Beam4pm`, so the generated `AshEx4pm.Ferroplan` unit is
+  empty by construction and this module carries the ferroplan surface.  It owns
+  no planner semantics; it delegates to the ex4pm provider, and if the installed
+  ex4pm lacks the contract every call is a typed
+  `:ferroplan_runtime_unavailable` refusal with standing `:partial_alive`.
 
   Plans are candidates only.  This adapter grants no DO authority.
   """
