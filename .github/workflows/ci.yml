@@ -17,6 +17,9 @@ jobs:
       # RustlerPrecompiled fetches native artifacts. Reuse the runner's
       # system CA bundle instead of changing package/runtime semantics.
       HEX_CACERTS_PATH: /etc/ssl/certs/ca-certificates.crt
+      # Explorer's RustlerPrecompiled download hits the same OTP TLS edge;
+      # compile that one NIF locally instead of depending on release-assets TLS.
+      EXPLORER_BUILD: "1"
     strategy:
       fail-fast: false
       matrix:
