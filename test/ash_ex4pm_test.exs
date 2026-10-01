@@ -97,6 +97,47 @@ defmodule AshEx4pmTest do
 
     assert [%{"objectId" => related_id}] = relationships_by_qualifier["line_items"]
     assert related_id == to_string(real_line_item.id)
+
+    # ex4pm's real validator/normalizer must accept this shape downstream.
+    assert {:ok, validated} = Ex4pm.OCEL.validate_envelope(envelope)
+    assert {:ok, %Ex4pm.EventLog{}} = Ex4pm.OCEL.normalize(envelope)
+    assert map_size(validated.objects) == 2
+  end
+
+  test "build_envelope/2 emits a relationship loaded explicitly (no manage_relationship), once" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    {:ok, order} =
+      order
+      |> Ash.Changeset.for_update(:add_line_item, %{line_item: %{sku: "sku-9"}})
+      |> Ash.update()
+
+    loaded = Ash.load!(order, :line_items)
+    [line_item] = loaded.line_items
+
+    activity = %AshEx4pm.Activity{name: :order_created, on: :ship, resource: Order}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :ship},
+      data: loaded,
+      changeset: nil
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+    [event] = envelope["events"]
+
+    assert map_size(envelope["objects"]) == 2
+    assert envelope["objects"][to_string(line_item.id)]["type"] == "LineItem"
+
+    assert [%{"objectId" => id}] =
+             Enum.filter(event["relationships"], &(&1["qualifier"] == "line_items"))
+
+    assert id == to_string(line_item.id)
+    assert {:ok, _} = Ex4pm.OCEL.validate_envelope(envelope)
   end
 
   test "build_envelope/2 skips a relationship key whose value is not actually resolved " <>
@@ -462,7 +503,12 @@ defmodule AshEx4pmTest do
     # (Ash's own change tracking, not something this test fabricates).
     assert changeset.attributes[:status] == :shipped
 
-    activity = %AshEx4pm.Activity{name: :order_shipped, on: :ship, resource: Order, track_attribute_changes?: true}
+    activity = %AshEx4pm.Activity{
+      name: :order_shipped,
+      on: :ship,
+      resource: Order,
+      track_attribute_changes?: true
+    }
 
     notification = %Ash.Notifier.Notification{
       resource: Order,

@@ -61,7 +61,9 @@ defmodule AshEx4pm.Notifier do
      now walks every relationship name present as a key in
      `notification.changeset.relationships` (used only to know *which*
      relationships this action's `manage_relationship` calls touched --
-     never for its raw pre-commit values) and reads the real, resolved,
+     never for its raw pre-commit values), plus every other relationship
+     of the resource that is already loaded on `notification.data` (an
+     explicit `load:` or this notifier's own `load/2`), and reads the real, resolved,
      post-commit related record(s) directly off `notification.data`.
      This works because Ash's own `manage_relationships/4`
      (`deps/ash/lib/ash/actions/managed_relationships.ex:710`) does
@@ -439,32 +441,56 @@ defmodule AshEx4pm.Notifier do
   # actually resolved here) is skipped, never emitted as an incomplete
   # object.
   @doc false
-  def managed_relationship_objects(%{changeset: %{relationships: relationships}} = notification)
-      when is_map(relationships) do
+  def managed_relationship_objects(%Ash.Notifier.Notification{} = notification) do
     resource = notification.resource
     data = notification.data
 
-    relationships
-    |> Map.keys()
-    |> Enum.reduce({[], []}, fn rel_name, {objects_acc, rels_acc} ->
-      case related_records(resource, data, rel_name) do
-        {:ok, destination, records} ->
-          qualifier = to_string(rel_name)
+    {objects, rels} =
+      notification
+      |> candidate_relationship_names()
+      |> Enum.reduce({[], []}, fn rel_name, {objects_acc, rels_acc} ->
+        case related_records(resource, data, rel_name) do
+          {:ok, destination, records} ->
+            qualifier = to_string(rel_name)
 
-          Enum.reduce(records, {objects_acc, rels_acc}, fn record, {o, r} ->
-            related_id = record_id(destination, record)
-            object = %{"id" => related_id, "type" => resource_type_name(destination)}
-            relationship = %{"objectId" => related_id, "qualifier" => qualifier}
-            {[object | o], [relationship | r]}
-          end)
+            Enum.reduce(records, {objects_acc, rels_acc}, fn record, {o, r} ->
+              related_id = record_id(destination, record)
+              object = %{"id" => related_id, "type" => resource_type_name(destination)}
+              relationship = %{"objectId" => related_id, "qualifier" => qualifier}
+              {[object | o], [relationship | r]}
+            end)
 
-        :error ->
-          {objects_acc, rels_acc}
-      end
-    end)
+          :error ->
+            {objects_acc, rels_acc}
+        end
+      end)
+
+    {Enum.uniq(objects), Enum.uniq(rels)}
   end
 
   def managed_relationship_objects(_notification), do: {[], []}
+
+  # Relationships touched by `manage_relationship` on this changeset, plus
+  # every other relationship of the resource -- an explicit `load:` or this
+  # notifier's own `load/2` also leaves real, persisted records on
+  # `notification.data`. Anything still `%Ash.NotLoaded{}` is skipped by
+  # `related_records/3`, so no relationship is ever guessed at or lazily loaded.
+  defp candidate_relationship_names(notification) do
+    managed =
+      case notification.changeset do
+        %{relationships: rels} when is_map(rels) -> Map.keys(rels)
+        _ -> []
+      end
+
+    declared =
+      try do
+        notification.resource |> Ash.Resource.Info.relationships() |> Enum.map(& &1.name)
+      rescue
+        _ -> []
+      end
+
+    Enum.uniq(managed ++ declared)
+  end
 
   defp related_records(resource, data, rel_name) do
     with %{destination: destination} <- Ash.Resource.Info.relationship(resource, rel_name),
