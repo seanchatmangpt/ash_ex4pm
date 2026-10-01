@@ -41,11 +41,14 @@ defmodule AshEx4pm.FerroplanRuntimeTest do
   end
 
   test "a missing provider contract is a typed refusal, never a guess" do
+    # wasm_built?/0 is required too: standing/0 applies it for the alive verdict,
+    # so a provider lacking it must refuse, not crash.
     assert FerroplanRuntime.required_contract() == [
              plan: 4,
              plan_production: 4,
              readiness: 1,
-             version: 1
+             version: 1,
+             wasm_built?: 0
            ]
   end
 end

@@ -4,8 +4,8 @@ defmodule AshEx4pm.FerroplanRuntime do
   ex4pm (>= 26.9.30) owns and ships with its packaged wasm artifact.
 
   This is the live path for planning.  ex4pm no longer forward-declares ferroplan
-  routes on `Ex4pm.Engine.Beam4pm`, so the generated `AshEx4pm.Ferroplan` unit is
-  empty by construction and this module carries the ferroplan surface.  It owns
+  routes on `Ex4pm.Engine.Beam4pm` (removed in 26.10.1), so the former generated
+  `AshEx4pm.Ferroplan` unit is retired and this module carries the ferroplan surface.  It owns
   no planner semantics; it delegates to the ex4pm provider, and if the installed
   ex4pm lacks the contract every call is a typed
   `:ferroplan_runtime_unavailable` refusal with standing `:partial_alive`.
@@ -15,7 +15,7 @@ defmodule AshEx4pm.FerroplanRuntime do
 
   @provider Ex4pm.Engine.Ferroplan
 
-  @required_contract [plan: 4, plan_production: 4, readiness: 1, version: 1]
+  @required_contract [plan: 4, plan_production: 4, readiness: 1, version: 1, wasm_built?: 0]
 
   @type refusal :: {:ferroplan_runtime_unavailable, map()}
 
