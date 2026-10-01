@@ -36,6 +36,9 @@ jobs:
           curl -fsSL -o /usr/local/bin/rebar3 https://github.com/erlang/rebar3/releases/latest/download/rebar3
           chmod +x /usr/local/bin/rebar3
           rebar3 --version
+          # Mix ignores PATH for rebar3; it honors MIX_REBAR3 (or its own
+          # mix_home copy, which can only be fetched from the broken mirror).
+          echo "MIX_REBAR3=/usr/local/bin/rebar3" >> "$GITHUB_ENV"
 
       - uses: actions/cache@v4
         with:
