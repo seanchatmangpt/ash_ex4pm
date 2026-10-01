@@ -566,6 +566,105 @@ defmodule AshEx4pmTest do
              %AshEx4pm.Activity{name: :order_created, on: :create, resource: Order}
   end
 
+  test "build_envelope/2 populates real changed-attribute values on :update actions, closing the OCEL 2.0 attribute-history gap" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{name: :order_relabeled, on: :relabel, resource: Order}
+
+    # Real update #1: a real Ash.Changeset for a real :update action,
+    # actually persisted via a real Ash.update/1 call against the
+    # Ets data layer -- not a hand-built map standing in for one.
+    changeset1 = order |> Ash.Changeset.for_update(:relabel, %{status: :processing})
+    {:ok, order_processing} = Ash.update(changeset1)
+
+    notification1 = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :relabel, type: :update},
+      data: order_processing,
+      changeset: changeset1
+    }
+
+    envelope1 = AshEx4pm.Notifier.build_envelope(activity, notification1)
+
+    # Real update #2: the same object, a second real changed value.
+    changeset2 = order_processing |> Ash.Changeset.for_update(:relabel, %{status: :shipped})
+    {:ok, order_shipped} = Ash.update(changeset2)
+
+    notification2 = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :relabel, type: :update},
+      data: order_shipped,
+      changeset: changeset2
+    }
+
+    envelope2 = AshEx4pm.Notifier.build_envelope(activity, notification2)
+
+    [event1] = envelope1["events"]
+    [event2] = envelope2["events"]
+
+    # The gap this closes: previously build_envelope/2 emitted no
+    # "attributes" key at all, so ex4pm's real
+    # Ex4pm.OCEL.normalize_event/2 (drop_known_event_keys/1) had nothing
+    # to extract and event.attributes was always %{}.
+    assert event1["attributes"] == %{"status" => :processing}
+    assert event2["attributes"] == %{"status" => :shipped}
+
+    object_id = to_string(order.id)
+
+    combined = %{envelope1 | "events" => [event1, event2]}
+
+    # Real end-to-end: the combined envelope is actually accepted by
+    # ex4pm's real Ex4pm.Stream.Ingest.ingest_envelope/1 (real
+    # OCEL.validate_envelope/1 + real OCEL.normalize/1 + a real receipt
+    # pair written to Ex4pm.Evidence.Store) -- not merely
+    # self-consistent within ash_ex4pm.
+    assert {:ok, %{status: :ingested, event_count: 2}} =
+             Ex4pm.Stream.Ingest.ingest_envelope(combined)
+
+    # ingest_envelope/1 does not hand back the normalized %Ex4pm.EventLog{}
+    # it built internally, so reconstruct it the same real way
+    # (Ex4pm.OCEL.normalize/1 is exactly what ingest_envelope/1 calls
+    # after validate_envelope/1) to drive the real
+    # Ex4pm.OCEL2.attribute_history/3 reconstruction against it.
+    {:ok, log} =
+      Ex4pm.OCEL.normalize(%{
+        events: combined["events"],
+        objects: combined["objects"],
+        object_relationships: []
+      })
+
+    assert {:ok, history} = Ex4pm.OCEL2.attribute_history(log, object_id, "status")
+
+    assert [
+             %Ex4pm.AttributeChange{name: "status", value: :processing},
+             %Ex4pm.AttributeChange{name: "status", value: :shipped}
+           ] = history
+  end
+
+  test "build_envelope/2 emits an empty attributes map for :create actions (no prior value to diff against)" do
+    {:ok, order} =
+      Order
+      |> Ash.Changeset.for_create(:create, %{status: :pending})
+      |> Ash.create()
+
+    activity = %AshEx4pm.Activity{name: :order_created, on: :create, resource: Order}
+
+    notification = %Ash.Notifier.Notification{
+      resource: Order,
+      action: %{name: :create, type: :create},
+      data: order,
+      changeset: Order |> Ash.Changeset.for_create(:create, %{status: :pending})
+    }
+
+    envelope = AshEx4pm.Notifier.build_envelope(activity, notification)
+    [event] = envelope["events"]
+
+    assert event["attributes"] == %{}
+  end
+
   test "an action with no matching activity does not attempt to emit anything" do
     {:ok, order} =
       Order
