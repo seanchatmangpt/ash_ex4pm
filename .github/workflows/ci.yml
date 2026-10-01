@@ -12,6 +12,11 @@ jobs:
   test:
     name: mix verify (OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }})
     runs-on: ubuntu-24.04
+    env:
+      # OTP TLS on this runner can reject the served certificate chain when
+      # RustlerPrecompiled fetches native artifacts. Reuse the runner's
+      # system CA bundle instead of changing package/runtime semantics.
+      HEX_CACERTS_PATH: /etc/ssl/certs/ca-certificates.crt
     strategy:
       fail-fast: false
       matrix:
