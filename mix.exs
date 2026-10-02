@@ -74,7 +74,8 @@ defmodule AshEx4pm.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      maintainers: ["Sean Chatman"]
+      maintainers: ["Sean Chatman"],
+      files: ~w(lib priv mix.exs README.md CHANGELOG.md docs docs/**/*)
     ]
   end
 
