@@ -1,0 +1,26 @@
+# GATE 040 -- emitter admission contract.
+#
+# MESSAGE: every ex4ev:Emitter must name a consumer Ash resource, action, module
+# namespace and OTP app, and must NOT be an ash_pplan (or any other producer)
+# module. Templates fan out over these rows to render CONSUMER-namespaced modules;
+# a producer-namespaced emitter row would embed producer modules in consumer
+# output -- the exact coupling this pack forbids. Any row = a violation; ZERO rows
+# on a conforming pack.
+PREFIX ex4ev: <http://seanchatmangpt.github.io/packs/ash-ex4pm-evidence#>
+
+SELECT ?emitter ?violation WHERE {
+  {
+    VALUES (?missing) {
+      (ex4ev:emitterResource) (ex4ev:emitterAction) (ex4ev:emitterNamespace)
+      (ex4ev:emitterApp)
+    }
+    ?emitter a ex4ev:Emitter .
+    FILTER NOT EXISTS { ?emitter ?missing ?any }
+  }
+  UNION {
+    ?emitter a ex4ev:Emitter ; ex4ev:emitterNamespace ?ns .
+    FILTER STRSTARTS(STR(?ns), "AshPPlan")
+    BIND(ex4ev:emitterNamespace AS ?violation)
+  }
+}
+ORDER BY ?emitter ?violation

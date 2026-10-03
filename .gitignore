@@ -11,3 +11,5 @@ erl_crash.dump
 .elixir_ls/
 .lexical/
 ash_ex4pm-*.tar
+/tmp/
+/_build-pub/

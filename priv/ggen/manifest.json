@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "name": "ash-ex4pm-evidence-pack",
+    "kind": "vendored-marketplace-pack",
+    "pack": "priv/ggen/vendor/render/ash-ex4pm-evidence-pack/",
+    "engine": "oxigraph",
+    "renderer": "ggen_igniter git 0abed8a35db68c18bba6982b266dd7546c162d1c (Tera); the repo's hex ggen_igniter dep renders EEx only and MUST NOT actuate these .tmpl units",
+    "source_repo": "ggen-marketplace",
+    "source_git_sha": "e8e2c3066e7404d097cb21083d05e6814f9a3dcc",
+    "lock": "priv/ggen/vendor/PACKS.lock.json",
+    "ontology": "priv/ggen/vendor/render/ash-ex4pm-evidence-pack/ontology.ttl",
+    "templates": [
+      "priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/process_evidence.ex.tmpl -> lib/ash_ex4pm/evidence/process_evidence.ex",
+      "priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/ex4pm_adapter.ex.tmpl -> lib/ash_ex4pm/evidence/ex4pm_adapter.ex",
+      "priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/realtime_bridge.ex.tmpl -> lib/ash_ex4pm/evidence/realtime_bridge.ex",
+      "priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/evidence_court.exs.tmpl -> test/ash_ex4pm/evidence_court.exs"
+    ],
+    "out": "lib/ash_ex4pm/evidence/*.ex plus test/ash_ex4pm/evidence_court.exs",
+    "test_path": "test/ash_ex4pm",
+    "sync_task": "mix ash_ex4pm.ggen.sync's runner renders EEx only; this pack is actuated via the pinned ash_pplan ggen_igniter 0abed8a toolchain (see priv/ggen/vendor/sync.sh header and CHANGELOG [Unreleased])"
+  }
+]

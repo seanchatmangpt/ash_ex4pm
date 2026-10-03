@@ -1,0 +1,35 @@
+# GATE 020 -- bridge guard contract.
+#
+# MESSAGE: every ex4ev:EvidenceBridge must declare producerSchema ("ash_ex4pm/1",
+# the wire shape Ex4pm.OCEL.validate_envelope/1 admits), producerModule,
+# validatorMFA, ingestMFA and broadcasterAppEnv. The validator/ingest MFAs must be
+# the REAL ex4pm entry points -- this pack never reimplements the validator. Any
+# row = a violation; ZERO rows on a conforming pack.
+PREFIX ex4ev: <http://seanchatmangpt.github.io/packs/ash-ex4pm-evidence#>
+
+SELECT ?bridge ?missing WHERE {
+  {
+    VALUES (?missing) {
+      (ex4ev:producerSchema) (ex4ev:producerModule) (ex4ev:validatorMFA)
+      (ex4ev:ingestMFA) (ex4ev:broadcasterAppEnv)
+    }
+    ?bridge a ex4ev:EvidenceBridge .
+    FILTER NOT EXISTS { ?bridge ?missing ?any }
+  }
+  UNION {
+    ?bridge a ex4ev:EvidenceBridge ; ex4ev:producerSchema ?schema .
+    FILTER (?schema != "ash_ex4pm/1")
+    BIND(ex4ev:producerSchema AS ?missing)
+  }
+  UNION {
+    ?bridge a ex4ev:EvidenceBridge ; ex4ev:validatorMFA ?validator .
+    FILTER (?validator != "Ex4pm.OCEL.validate_envelope/1")
+    BIND(ex4ev:validatorMFA AS ?missing)
+  }
+  UNION {
+    ?bridge a ex4ev:EvidenceBridge ; ex4ev:ingestMFA ?ingest .
+    FILTER (?ingest != "Ex4pm.Stream.Ingest.ingest_envelope/2")
+    BIND(ex4ev:ingestMFA AS ?missing)
+  }
+}
+ORDER BY ?bridge ?missing

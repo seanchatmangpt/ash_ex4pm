@@ -1,0 +1,20 @@
+# GATE 050 -- class census.
+#
+# MESSAGE: every class this pack manufactures against (EvidenceBridge,
+# EventMapping, RealtimeSeam, EvidenceCourt, Emitter) must have at least one
+# individual in the ontology. FILTER NOT EXISTS keeps only classes with zero
+# instances -- ZERO rows means every class is populated; any row names a class
+# with zero instances. This is the for_each driver's census mirror: an empty
+# Emitter census would silently render nothing. (A COUNT/HAVING census was
+# tried first and is engine-dependent: rdflib drops zero-count groups from
+# OPTIONAL joins, so the engine-robust NOT EXISTS form is the admitted gate.)
+PREFIX ex4ev: <http://seanchatmangpt.github.io/packs/ash-ex4pm-evidence#>
+
+SELECT ?class WHERE {
+  VALUES ?class {
+    ex4ev:EvidenceBridge ex4ev:EventMapping ex4ev:RealtimeSeam
+    ex4ev:EvidenceCourt ex4ev:Emitter
+  }
+  FILTER NOT EXISTS { ?s a ?class . }
+}
+ORDER BY ?class

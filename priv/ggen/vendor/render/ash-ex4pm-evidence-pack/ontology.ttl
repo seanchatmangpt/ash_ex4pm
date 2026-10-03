@@ -1,0 +1,128 @@
+# ash-ex4pm-evidence-pack ontology.
+#
+# Generalizes ash_pplan's evidence machinery into consumer-facing ontology rows.
+# No ash_pplan module is embedded in rendered output: templates read these rows
+# and emitters fan out consumer-namespaced modules against the consumer's own
+# Ash resources.
+
+@prefix ex4ev: <http://seanchatmangpt.github.io/packs/ash-ex4pm-evidence#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ---------------------------------------------------------------------------
+# Classes
+# ---------------------------------------------------------------------------
+
+ex4ev:EvidenceBridge a rdfs:Class ;
+  rdfs:label "EvidenceBridge" ;
+  rdfs:comment "A guarded adapter from consumer events to the canonical ex4pm wire envelope: producer schema, real validator MFA (Ex4pm.OCEL.validate_envelope/1), real ingest MFA (Ex4pm.Stream.Ingest.ingest_envelope/2), and the opt-in broadcaster app-env key. Generalized from AshPPlan.ProcessEvidence.AshEx4pm." .
+
+ex4ev:EventMapping a rdfs:Class ;
+  rdfs:label "EventMapping" ;
+  rdfs:comment "Receipt-status -> OCEL activity mapping: which activity fires per receipt status, which OCEL object types the event relates, and the event id pattern." .
+
+ex4ev:RealtimeSeam a rdfs:Class ;
+  rdfs:label "RealtimeSeam" ;
+  rdfs:comment "The bounded producer/consumer seam: producers write to :persistent_term, one bridge process drains into a capacity-bounded ETS ring buffer with drop-oldest overflow (post-incident pattern after an unbounded broadcaster queued ~20k events and crashed the VM)." .
+
+ex4ev:EvidenceCourt a rdfs:Class ;
+  rdfs:label "EvidenceCourt" ;
+  rdfs:comment "The Chicago-style evidence court: fresh/duplicate/refusal invariants plus the tamper-evident digest assertion, run against the REAL Ex4pm (never a reimplementation)." .
+
+ex4ev:Emitter a rdfs:Class ;
+  rdfs:label "Emitter" ;
+  rdfs:comment "A consumer Ash resource/action admitted for evidence emission: names the consumer module namespace, OTP app, Ash resource and action. The template for_each driver fans out over Emitter rows; no ash_pplan module is ever embedded -- the rendered modules belong to the consumer." .
+
+# ---------------------------------------------------------------------------
+# The canonical bridge row
+# ---------------------------------------------------------------------------
+
+ex4ev:bridge-ash-ex4pm a ex4ev:EvidenceBridge ;
+  ex4ev:bridgeName "ash_ex4pm_bridge" ;
+  ex4ev:producerSchema "ash_ex4pm/1" ;
+  ex4ev:producerModule "process_evidence" ;
+  ex4ev:validatorMFA "Ex4pm.OCEL.validate_envelope/1" ;
+  ex4ev:ingestMFA "Ex4pm.Stream.Ingest.ingest_envelope/2" ;
+  ex4ev:broadcasterAppEnv "broadcaster" ;
+  ex4ev:broadcasterDefault false ;
+  rdfs:comment "Canonical bridge row: the template renders consumer-namespaced modules from this row. validator/ingest MFAs are applied via apply/3 behind Code.ensure_loaded?/1 guards, so everything compiles and runs with ex4pm absent." .
+
+# ---------------------------------------------------------------------------
+# Event mappings: receipt status -> OCEL activity (the ash_pplan witnessed
+# semantics: attempted/succeeded pair per task, failed instead of succeeded,
+# tasks after a failure are not attempted)
+# ---------------------------------------------------------------------------
+
+ex4ev:mapping-task-attempted a ex4ev:EventMapping ;
+  ex4ev:mappingOf ex4ev:bridge-ash-ex4pm ;
+  ex4ev:receiptStatus "attempted" ;
+  ex4ev:ocelActivity "task_attempted" ;
+  ex4ev:idPattern "{{run}}/{{task}}/attempted" ;
+  ex4ev:objectTypes "WorkflowRun,Capability,Realization" ;
+  rdfs:comment "Fired once per task before any terminal event." .
+
+ex4ev:mapping-task-succeeded a ex4ev:EventMapping ;
+  ex4ev:mappingOf ex4ev:bridge-ash-ex4pm ;
+  ex4ev:receiptStatus "succeeded" ;
+  ex4ev:ocelActivity "task_succeeded" ;
+  ex4ev:idPattern "{{run}}/{{task}}/succeeded" ;
+  ex4ev:objectTypes "WorkflowRun,Capability,Realization" ;
+  rdfs:comment "Fired instead of task_failed when the receipt succeeded." .
+
+ex4ev:mapping-task-failed a ex4ev:EventMapping ;
+  ex4ev:mappingOf ex4ev:bridge-ash-ex4pm ;
+  ex4ev:receiptStatus "failed" ;
+  ex4ev:ocelActivity "task_failed" ;
+  ex4ev:idPattern "{{run}}/{{task}}/failed" ;
+  ex4ev:objectTypes "WorkflowRun,Capability,Realization" ;
+  rdfs:comment "Fired instead of task_succeeded at the failed task; downstream tasks are not attempted." .
+
+ex4ev:mapping-run-started a ex4ev:EventMapping ;
+  ex4ev:mappingOf ex4ev:bridge-ash-ex4pm ;
+  ex4ev:receiptStatus "run_started" ;
+  ex4ev:ocelActivity "run_started" ;
+  ex4ev:idPattern "{{run}}/started" ;
+  ex4ev:objectTypes "WorkflowRun" ;
+  rdfs:comment "Run-boundary event (LedgerOCEL lineage)." .
+
+ex4ev:mapping-run-ended a ex4ev:EventMapping ;
+  ex4ev:mappingOf ex4ev:bridge-ash-ex4pm ;
+  ex4ev:receiptStatus "run_ended" ;
+  ex4ev:ocelActivity "run_ended" ;
+  ex4ev:idPattern "{{run}}/ended" ;
+  ex4ev:objectTypes "WorkflowRun" ;
+  rdfs:comment "Run-boundary event carrying the terminal status (LedgerOCEL lineage)." .
+
+# ---------------------------------------------------------------------------
+# The bounded realtime seam
+# ---------------------------------------------------------------------------
+
+ex4ev:seam-ets-ring a ex4ev:RealtimeSeam ;
+  ex4ev:seamOf ex4ev:bridge-ash-ex4pm ;
+  ex4ev:transport "persistent_term_to_ets_ring_buffer" ;
+  ex4ev:capacity 10000 ;
+  ex4ev:overflowPolicy "drop_oldest" ;
+  ex4ev:drainSemantics "drain_returns_and_clears" ;
+  rdfs:comment "Producers write via persistent_term handoff; one bridge process drains into a capped ETS ordered_set ring, evicting the oldest event on overflow." .
+
+# ---------------------------------------------------------------------------
+# The evidence court
+# ---------------------------------------------------------------------------
+
+ex4ev:court-evidence a ex4ev:EvidenceCourt ;
+  ex4ev:courtOf ex4ev:bridge-ash-ex4pm ;
+  ex4ev:courtInvariants "fresh_validates,duplicate_detected,refusal_malformed,digest_tamper_evident" ;
+  ex4ev:digestAlgorithm "sha256(term_to_binary({id, activity, attributes}))" ;
+  rdfs:comment "Runs against the REAL Ex4pm.OCEL.validate_envelope/1 (compiled from the consumer's ex4pm checkout); refuses with exit 1 on any violated invariant." .
+
+# ---------------------------------------------------------------------------
+# Consumer emitter specimen (the fan-out driver; a consumer replaces this with
+# rows for its OWN Ash resources)
+# ---------------------------------------------------------------------------
+
+ex4ev:emitter-ash-ex4pm-engine-run a ex4ev:Emitter ;
+  ex4ev:emitterResource "AshEx4pm.EngineRun" ;
+  ex4ev:emitterAction "conform" ;
+  ex4ev:emitterNamespace "AshEx4pm.Evidence" ;
+  ex4ev:emitterNamespace "AshEx4pm.Evidence" ;
+  ex4ev:emitterApp "ash_ex4pm" ;
+  rdfs:comment "Consumer emitter: this repo's real AshEx4pm.EngineRun resource (conform action), rendering into the AshEx4pm.Evidence namespace of the ash_ex4pm OTP app. Replaces the pack's MyApp.Fulfillment specimen row." .

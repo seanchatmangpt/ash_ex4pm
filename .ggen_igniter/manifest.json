@@ -1,5 +1,42 @@
 {
-  "entries": {},
+  "entries": {
+    "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/evidence_court.exs.tmpl=>/Users/sac/ash_ex4pm/test/ash_ex4pm/evidence_court.exs": {
+      "out_template": "/Users/sac/ash_ex4pm/test/ash_ex4pm/evidence_court.exs",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/test/ash_ex4pm/evidence_court.exs": "sha256:062dc1a74e49a183a3bf6455a2c82e18da42255b035c116019db919bbeb2403c"
+      },
+      "pack_dir": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack",
+      "template": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/evidence_court.exs.tmpl",
+      "updated_at": "2026-10-02T03:39:21.373209Z"
+    },
+    "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/ex4pm_adapter.ex.tmpl=>/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/ex4pm_adapter.ex": {
+      "out_template": "/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/ex4pm_adapter.ex",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/ex4pm_adapter.ex": "sha256:865eac160058ace8416dbc167e9450b643b94d13eb9051a424ad5018548220c4"
+      },
+      "pack_dir": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack",
+      "template": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/ex4pm_adapter.ex.tmpl",
+      "updated_at": "2026-10-02T03:38:32.382763Z"
+    },
+    "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/process_evidence.ex.tmpl=>/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/process_evidence.ex": {
+      "out_template": "/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/process_evidence.ex",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/process_evidence.ex": "sha256:403a27a77467c2991e02b92ee611afb2cbea43dbc69bbd8726bcd4fa14f8bcc5"
+      },
+      "pack_dir": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack",
+      "template": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/process_evidence.ex.tmpl",
+      "updated_at": "2026-10-02T03:38:31.431335Z"
+    },
+    "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/realtime_bridge.ex.tmpl=>/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/realtime_bridge.ex": {
+      "out_template": "/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/realtime_bridge.ex",
+      "outputs": {
+        "/Users/sac/ash_ex4pm/lib/ash_ex4pm/evidence/realtime_bridge.ex": "sha256:590f9a9fc50d73eb7bea7f654185bca0ccd459bc4a4b343bdadaf621136306b5"
+      },
+      "pack_dir": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack",
+      "template": "/Users/sac/ash_ex4pm/priv/ggen/vendor/render/ash-ex4pm-evidence-pack/templates/realtime_bridge.ex.tmpl",
+      "updated_at": "2026-10-02T03:38:33.305149Z"
+    }
+  },
   "schema_version": "1",
   "version": 1
 }

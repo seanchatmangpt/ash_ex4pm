@@ -1,0 +1,75 @@
+{
+  "schema": "ash_ex4pm.ggen.vendor-lock/v1",
+  "source_repo": "ggen-marketplace",
+  "source_git_sha": "e8e2c3066e7404d097cb21083d05e6814f9a3dcc",
+  "packs": [
+    {
+      "name": "ash-ex4pm-evidence-pack",
+      "version": "0.1.0",
+      "source_tree_dirty": false,
+      "files": [
+        {
+          "path": "ash-ex4pm-evidence-pack.ontology.ttl",
+          "source_path": "packs/ash-ex4pm-evidence-pack/ontology.ttl",
+          "sha256": "fce66921ad3a5cca00b9bc596010c35b6fb1f5d388697d326127edeccec7640f"
+        },
+        {
+          "path": "gates/ash-ex4pm-evidence-pack/010_event_mapping_contract.rq",
+          "source_path": "packs/ash-ex4pm-evidence-pack/gates/010_event_mapping_contract.rq",
+          "sha256": "4bdf3a9ce3c3fc65f1648828751e2ef83921f3232973fb6aeaa682741d57162c"
+        },
+        {
+          "path": "gates/ash-ex4pm-evidence-pack/020_bridge_guard_contract.rq",
+          "source_path": "packs/ash-ex4pm-evidence-pack/gates/020_bridge_guard_contract.rq",
+          "sha256": "414c5e943adde4280acc9ae87340e2bf420fc3b8e75d2c4749bb9369d94bae1b"
+        },
+        {
+          "path": "gates/ash-ex4pm-evidence-pack/030_realtime_seam_contract.rq",
+          "source_path": "packs/ash-ex4pm-evidence-pack/gates/030_realtime_seam_contract.rq",
+          "sha256": "9730d3773fd05bafe90cfee1ac5295696af932df621beb884c930de90174fc7a"
+        },
+        {
+          "path": "gates/ash-ex4pm-evidence-pack/040_emitter_admission.rq",
+          "source_path": "packs/ash-ex4pm-evidence-pack/gates/040_emitter_admission.rq",
+          "sha256": "570aa84a7fc57bd9bbc4a002dfa49bbf0cbfe385141ff59699487fd1698f0e0a"
+        },
+        {
+          "path": "gates/ash-ex4pm-evidence-pack/050_class_census.rq",
+          "source_path": "packs/ash-ex4pm-evidence-pack/gates/050_class_census.rq",
+          "sha256": "ef41b2f35939b53f0fd5d099763905bc1595eab3d7730317ed61644b669db602"
+        },
+        {
+          "path": "gates/ash-ex4pm-evidence-pack/060_no_beam4pm_coupling.rq",
+          "source_path": "packs/ash-ex4pm-evidence-pack/gates/060_no_beam4pm_coupling.rq",
+          "sha256": "c2443f46c05e201dc90e2fe4f29d481285dbc88e8f0e0fdd86c9c99288a9688a"
+        },
+        {
+          "path": "templates-src/evidence_court.exs.tmpl",
+          "source_path": "packs/ash-ex4pm-evidence-pack/templates/evidence_court.exs.tmpl",
+          "sha256": "3b24f6f116b3cfd1a30662fd3d4f8d0650ee9cf30ac396a2431f59e0cd837b7d"
+        },
+        {
+          "path": "templates-src/ex4pm_adapter.ex.tmpl",
+          "source_path": "packs/ash-ex4pm-evidence-pack/templates/ex4pm_adapter.ex.tmpl",
+          "sha256": "aa011e0f650a7c9f3a58f7583cfdd42343e70a68fa678db4210e20fe2637a1b1"
+        },
+        {
+          "path": "templates-src/process_evidence.ex.tmpl",
+          "source_path": "packs/ash-ex4pm-evidence-pack/templates/process_evidence.ex.tmpl",
+          "sha256": "cc3448e61fa7f96bdd3c75fd05e1292a1da28264c618845f5ac6f80db5f0dd4c"
+        },
+        {
+          "path": "templates-src/realtime_bridge.ex.tmpl",
+          "source_path": "packs/ash-ex4pm-evidence-pack/templates/realtime_bridge.ex.tmpl",
+          "sha256": "11b9950d6d8afee8d669083dd6a2289310488f3e6f963e892950ebaa691315c4"
+        }
+      ]
+    }
+  ],
+  "generated": [
+    {
+      "path": "provenance.ttl",
+      "sha256": "2dc15dfa11a2d313ff763424856ed0e2f6c58b52ef4911515d7f66b2db7d1ad6"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ defmodule AshEx4pm.UpgradeContractTest do
   test "release 26.10.1 contract: @version, exact ex4pm pin, lock checksum, changelog entry" do
     mix_exs = File.read!("mix.exs")
 
-    assert mix_exs =~ ~s(@version "26.10.2")
+    assert mix_exs =~ ~s(@version "26.10.3")
     assert mix_exs =~ ~s({:ex4pm, "== 26.10.1"})
 
     lock = File.read!("mix.lock")

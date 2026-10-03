@@ -4,6 +4,58 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [26.10.3] - 2026-10-02
+
+### Added
+
+- **Vendored `ash-ex4pm-evidence-pack`** from ggen-marketplace (main @
+  `e8e2c3066e7404d097cb21083d05e6814f9a3dcc`, lock:
+  `priv/ggen/vendor/PACKS.lock.json`, provenance:
+  `priv/ggen/vendor/provenance.ttl`), following ex4pm's file-level vendoring
+  pattern (`~/ex4pm/priv/ggen/vendor/sync.sh`), adapted deterministically in
+  `priv/ggen/vendor/sync.sh`:
+  - byte-identical vendored copies of the pack's ontology, 6 gates and
+    4 Tera templates (all sha256-locked);
+  - a consumer render-pack at `priv/ggen/vendor/render/ash-ex4pm-evidence-pack/`:
+    the specimen `MyApp.Fulfillment` Emitter row replaced by this repo's real
+    `AshEx4pm.EngineRun` / `:conform` emitter (namespace `AshEx4pm.Evidence`,
+    app `:ash_ex4pm`), and the D6 specimen output paths rewritten to
+    `lib/ash_ex4pm/evidence/` + `test/ash_ex4pm/`.
+- **Rendered evidence surface** (`lib/ash_ex4pm/evidence/`, modules
+  `AshEx4pm.Evidence.*`, rendered via ggen_igniter 0abed8a's reactor
+  pipeline, 1 Emitter row fan-out each):
+  - `AshEx4pm.Evidence.ProcessEvidence` (+ `.Event`): receipts ->
+    task_attempted / task_succeeded / task_failed OCEL events, pure OCEL 2.0
+    JSON export, tamper-evident sha256 content digest;
+  - `AshEx4pm.Evidence.Ex4pmAdapter`: guarded `ash_ex4pm/1` wire envelope
+    (validate via real `Ex4pm.OCEL.validate_envelope/1`, ingest via real
+    `Ex4pm.Stream.Ingest.ingest_envelope/2`, opt-in broadcaster via app env
+    `:ash_ex4pm, :broadcaster`); degrades to
+    `{:error, %{reason: :unsupported, detail: :ex4pm_not_available}}` with
+    ex4pm absent;
+  - `AshEx4pm.Evidence.RealtimeBridge`: bounded persistent_term -> ETS
+    ring-buffer seam (capacity via `:ash_ex4pm, :bridge_capacity`, default
+    10_000, drop-oldest overflow).
+- **Evidence courts**: the rendered standalone court
+  `test/ash_ex4pm/evidence_court.exs` (`elixir test/ash_ex4pm/evidence_court.exs`,
+  5 PASS: fresh validates / digest stable / digest flips under tamper /
+  duplicate digest / malformed refused -- against the REAL Ex4pm compiled
+  from `EX4PM_ROOT`), plus the mix-test court
+  `test/ash_ex4pm/evidence_pack_test.exs` (same invariants against the real
+  `{:ex4pm, "== 26.10.1"}` hex dep).
+- **`priv/ggen/manifest.json`** now lists the vendored pack (was `[]`):
+  source git sha, lock path, per-template -> output mapping, test path, and
+  the runner caveat: `mix ash_ex4pm.ggen.sync`'s hex ggen_igniter dep is
+  EEx-only and must NOT actuate these Tera `.tmpl` units; actuation runs via
+  the pinned ash_pplan ggen_igniter (`0abed8a`) toolchain. A legacy-EEx
+  runner would fail loudly (no template/out keys match its unit schema)
+  rather than mis-render.
+
+### Changed
+
+- `mix test` now also covers the evidence pack invariants via
+  `test/ash_ex4pm/evidence_pack_test.exs`.
+
 ## [26.10.2] - 2026-10-01
 
 ### Added

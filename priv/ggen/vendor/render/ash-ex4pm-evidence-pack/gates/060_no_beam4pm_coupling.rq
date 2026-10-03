@@ -1,0 +1,14 @@
+# GATE 060 -- no beam4pm coupling.
+#
+# MESSAGE: no string literal anywhere in this pack's ontology may reference
+# beam4pm. The evidence plane is ex4pm-only: the envelope is admitted by
+# Ex4pm.OCEL.validate_envelope/1 and Ex4pm.Stream.Ingest.ingest_envelope/2, and a
+# beam4pm reference would silently import a second process-mining runtime into
+# every rendered consumer. Any row = a violation; ZERO rows on a conforming pack.
+PREFIX ex4ev: <http://seanchatmangpt.github.io/packs/ash-ex4pm-evidence#>
+
+SELECT ?subject ?prop ?value WHERE {
+  ?subject ?prop ?value .
+  FILTER ( isLiteral(?value) && CONTAINS(STR(?value), "beam4pm") )
+}
+ORDER BY ?subject ?prop ?value

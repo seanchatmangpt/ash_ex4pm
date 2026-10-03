@@ -1,0 +1,35 @@
+# GATE 010 -- event mapping contract.
+#
+# MESSAGE: every ex4ev:EventMapping must carry mappingOf (pointing at a real
+# ex4ev:EvidenceBridge), receiptStatus, ocelActivity, idPattern and objectTypes,
+# and its ocelActivity must be one of the closed activity set the rendered
+# ProcessEvidence behaviour emits (task_attempted | task_succeeded | task_failed |
+# run_started | run_ended). Any row = a violation; ZERO rows on a conforming pack.
+PREFIX ex4ev: <http://seanchatmangpt.github.io/packs/ash-ex4pm-evidence#>
+
+SELECT ?mapping ?missing WHERE {
+  {
+    VALUES (?type ?missing) {
+      (ex4ev:EventMapping ex4ev:mappingOf)
+      (ex4ev:EventMapping ex4ev:receiptStatus)
+      (ex4ev:EventMapping ex4ev:ocelActivity)
+      (ex4ev:EventMapping ex4ev:idPattern)
+      (ex4ev:EventMapping ex4ev:objectTypes)
+    }
+    ?mapping a ?type .
+    FILTER NOT EXISTS { ?mapping ?missing ?any }
+  }
+  UNION {
+    ?mapping a ex4ev:EventMapping ; ex4ev:mappingOf ?bridge .
+    FILTER NOT EXISTS { ?bridge a ex4ev:EvidenceBridge }
+    BIND(ex4ev:mappingOf AS ?missing)
+  }
+  UNION {
+    ?mapping a ex4ev:EventMapping ; ex4ev:ocelActivity ?activity .
+    FILTER (?activity != "task_attempted" && ?activity != "task_succeeded"
+            && ?activity != "task_failed" && ?activity != "run_started"
+            && ?activity != "run_ended")
+    BIND(ex4ev:ocelActivity AS ?missing)
+  }
+}
+ORDER BY ?mapping ?missing

@@ -1,0 +1,43 @@
+# GATE 030 -- realtime seam contract.
+#
+# MESSAGE: every ex4ev:RealtimeSeam must hang off a real ex4ev:EvidenceBridge, use
+# the bounded transport ("persistent_term_to_ets_ring_buffer"), declare an integer
+# capacity >= 1, and use a drop policy ("drop_oldest") -- an unbounded realtime
+# seam is exactly the post-incident defect class this pack forbids. Any row = a
+# violation; ZERO rows on a conforming pack.
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX ex4ev: <http://seanchatmangpt.github.io/packs/ash-ex4pm-evidence#>
+
+SELECT ?seam ?violation WHERE {
+  {
+    ?seam a ex4ev:RealtimeSeam ; ex4ev:seamOf ?bridge .
+    FILTER NOT EXISTS { ?bridge a ex4ev:EvidenceBridge }
+    BIND(ex4ev:seamOf AS ?violation)
+  }
+  UNION {
+    ?seam a ex4ev:RealtimeSeam ; ex4ev:transport ?transport .
+    FILTER (?transport != "persistent_term_to_ets_ring_buffer")
+    BIND(ex4ev:transport AS ?violation)
+  }
+  UNION {
+    ?seam a ex4ev:RealtimeSeam ; ex4ev:capacity ?capacity .
+    FILTER ( datatype(?capacity) != xsd:integer || ?capacity < 1 )
+    BIND(ex4ev:capacity AS ?violation)
+  }
+  UNION {
+    ?seam a ex4ev:RealtimeSeam .
+    FILTER NOT EXISTS { ?seam ex4ev:capacity ?any }
+    BIND(ex4ev:capacity AS ?violation)
+  }
+  UNION {
+    ?seam a ex4ev:RealtimeSeam ; ex4ev:overflowPolicy ?policy .
+    FILTER (?policy != "drop_oldest")
+    BIND(ex4ev:overflowPolicy AS ?violation)
+  }
+  UNION {
+    ?seam a ex4ev:RealtimeSeam .
+    FILTER NOT EXISTS { ?seam ex4ev:overflowPolicy ?any2 }
+    BIND(ex4ev:overflowPolicy AS ?violation)
+  }
+}
+ORDER BY ?seam ?violation
