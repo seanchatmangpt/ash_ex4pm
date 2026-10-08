@@ -1,0 +1,166 @@
+@prefix sj: <https://ggen-igniter.dev/ontology/semantic-jira#> .
+@prefix prd: <https://ggen-igniter.dev/sjira/v26.10.3/ard-prd#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# AshEx4pm v26.10.3 Application Requirements Document (ARD/PRD) as RDF/Turtle.
+#
+# Grounded in the repository's real, shipped capabilities at v26.10.3
+# (mix.exs @version, CHANGELOG, lib/, test/). Factual descriptions only:
+# this graph authors no sj:WorkOrder and no sj:Receipt; it records goals,
+# requirements anchored to real test paths, falsifiers, and disclosed
+# limitations. All human/machine renderings of this graph remain authority
+# NONE; BRCE and admitted-runtime consequence boundaries remain external.
+
+prd:PRD-ASH-EX4PM-26.10.3
+    a sj:GoalCheckpoint ;
+    dcterms:identifier "PRD-ASH-EX4PM-26.10.3" ;
+    rdfs:label "AshEx4pm v26.10.3 product requirements" ;
+    dcterms:description "Ash projection layer over ex4pm process evidence: OCEL envelope admission, receipted Ash actions, engine-run evidence with replay, capability projection, wasm runtime adapters, and ferroplan planning seams — projected only; algorithm and admission semantics stay upstream." ;
+    dcterms:source "docs/sjira/v26.10.3/ARD-PRD.ttl" ;
+    sj:repository "seanchatmangpt/ash_ex4pm" ;
+    sj:subject "ash-ex4pm:prd:v26.10.3" ;
+    sj:standing "UNKNOWN" ;
+    sj:authorityCeiling "CONSTRUCT" ;
+    sj:evidenceCeiling "IMPLEMENTED_UNVERIFIED" ;
+    sj:replayIdentity "prd:ash-ex4pm:v26.10.3:PRD-ASH-EX4PM-26.10.3" ;
+    sj:projection
+        prd:projection-identity,
+        prd:projection-ocel-admission,
+        prd:projection-brce,
+        prd:projection-engine-run,
+        prd:projection-capability-registry,
+        prd:projection-wasm,
+        prd:projection-ferroplan,
+        prd:projection-limitations ;
+    sj:acceptance
+        prd:acc-grounded-only,
+        prd:acc-ownership-boundary,
+        prd:acc-pin-fidelity ;
+    sj:falsifier
+        prd:falsifier-unshipped-capability,
+        prd:falsifier-ownership-violation,
+        prd:falsifier-pin-drift,
+        prd:falsifier-authority-widening ;
+    sj:exclusion
+        "No capability projection, plan, forecast, analysis result, or capability descriptor acquires DO authority by being projected through AshEx4pm.",
+        "AshEx4pm implements no alternate wasm or planner semantics; wasm4pm and ferroplan own algorithms, ex4pm owns admission, evidence, replay, and provider boundaries.",
+        "No test path cited in this graph is claimed to pass in this graph; passing status is an observation owned by the cited test runs.",
+        "This graph authors no WorkOrder and no Receipt." .
+
+# ---------------------------------------------------------------- identity
+
+prd:projection-identity a sj:Projection ;
+    rdfs:label "Project identity" ;
+    dcterms:description "ash_ex4pm is an Elixir library (app :ash_ex4pm, version 26.10.3 per mix.exs, Elixir ~> 1.17), an Ash 3 / Spark 2.2 projection layer whose runtime dependency is exact-pinned to {:ex4pm, \"== 26.10.1\"} (hex checksum b42dd8d63b11fea76b10bb8f84503635f8ee0e6e6851cd7a8102759650c93be6). ggen_igniter (~> 26.9) is a dev/test-only, runtime: false dependency driving mix ash_ex4pm.ggen.sync; the hex ggen_igniter is EEx-only and must not actuate the repo's vendored Tera templates." ;
+    sj:acceptance prd:acc-pin-fidelity .
+
+# ------------------------------------------------- OCEL envelope admission
+
+prd:projection-ocel-admission a sj:Projection ;
+    rdfs:label "Notifier envelope admission" ;
+    dcterms:description "AshEx4pm.Notifier is a real Ash.Notifier that builds an OCEL 2.0 envelope post-commit (build_envelope/2) and delegates to Ex4pm.Stream.Ingest.ingest_envelope/1 for validation and ingest. The `ex4pm do` Spark DSL section (AshEx4pm.Dsl) declares per-action activity capture; Transformers.Persist persists it and Verifiers.Verify checks it. A refused ingest does not roll back the already-committed Ash action." ;
+    sj:acceptance prd:acc-ownership-boundary ;
+    sj:falsifier prd:falsifier-ownership-violation .
+
+# ------------------------------------------------------------- BRCE actions
+
+prd:projection-brce a sj:Projection ;
+    rdfs:label "BRCE admission-only and receipted DO" ;
+    dcterms:description "Two intentionally different changes: AshEx4pm.Changes.BrceGate performs pre-action admission only (its receipt proves admission, not the later Ash mutation); AshEx4pm.Changes.ReceiptedAction installs an outermost around_action running the real Ash mutation inside Ex4pm.Evidence.BRCE.execute/5, binding the outcome receipt to the real consequence digest and returning ash_ex4pm_receipt metadata, with subject checks and idempotency support. Disclosed boundary: the receipt is sealed inside the around_action transaction scope; a commit failure after the hook returns is not captured and remains unverified for transactional data layers." ;
+    sj:requiresEvidence prd:evidence-receipted-action-tests .
+
+# ----------------------------------------------------- engine-run evidence
+
+prd:projection-engine-run a sj:Projection ;
+    rdfs:label "Engine-run resources with receipt replay" ;
+    dcterms:description "AshEx4pm.EngineRun (AshEx4pm.EngineRunDomain) projects engine results into Ash evidence with a receipt_store for replay, plus call_log_bridge and economic_isa (the canonical economic ISA adapter). The v26.10.3 rendered evidence surface (lib/ash_ex4pm/evidence/): AshEx4pm.Evidence.ProcessEvidence (+ .Event) emits task_attempted / task_succeeded / task_failed OCEL events with tamper-evident sha256 content digest; AshEx4pm.Evidence.Ex4pmAdapter validates via real Ex4pm.OCEL.validate_envelope/1 and ingests via real Ex4pm.Stream.Ingest.ingest_envelope/2 (opt-in broadcaster via app env :ash_ex4pm, :broadcaster), degrading to {:error, %{reason: :unsupported, detail: :ex4pm_not_available}} with ex4pm absent; AshEx4pm.Evidence.RealtimeBridge is a bounded persistent_term -> ETS ring buffer (capacity via :ash_ex4pm, :bridge_capacity, default 10_000, drop-oldest)." ;
+    sj:requiresEvidence
+        prd:evidence-engine-run-tests,
+        prd:evidence-evidence-courts .
+
+# --------------------------------------------------- capability projection
+
+prd:projection-capability-registry a sj:Projection ;
+    rdfs:label "Capability projection registry" ;
+    dcterms:description "AshEx4pm.capabilities/1, capability/1, and capability_standing/1 expose a machine-readable registry (AshEx4pm.Capabilities over AshEx4pm.Capability and capability_projection) recording canonical owner, Ash projection, function/arity, OBSERVE/ANALYZE/CONSTRUCT/ADMIT/DO boundary, authority semantics, consequential-DO capability, optional inspection-only standing probe, and canonical documentation. Registry distinction: upstream capability != projected capability != admitted runtime capability != authorized consequence." ;
+    sj:requiresEvidence prd:evidence-capability-tests .
+
+# ------------------------------------------------------------- wasm runtime
+
+prd:projection-wasm a sj:Projection ;
+    rdfs:label "wasm runtime adapters" ;
+    dcterms:description "AshEx4pm.WasmRuntime delegates to ex4pm's canonical wasm runtime surface (available?/0, standing/0, algorithms/0, statistics/2, forecast/1). It owns no wasm4pm semantics; upstream algorithm existence implies neither projection nor ALIVE standing here." ;
+    sj:requiresEvidence prd:evidence-wasm-tests .
+
+# -------------------------------------------------------------- ferroplan
+
+prd:projection-ferroplan a sj:Projection ;
+    rdfs:label "ferroplan planning seams" ;
+    dcterms:description "Stateless seam AshEx4pm.FerroplanRuntime (available?/0, standing/0, plan/2, plan_production/2) and stateful seam AshEx4pm.FerroplanSessions (new/2, observe/2, think/1, replan_following/1, repair/1). Planning and session results are CONSTRUCT-side candidates: they do not mutate Ash business state and do not acquire DO authority by crossing the adapter." ;
+    sj:requiresEvidence prd:evidence-ferroplan-tests .
+
+# ------------------------------------------------------------ requirements
+
+prd:projection-limitations a sj:Projection ;
+    rdfs:label "Honest limitations" ;
+    dcterms:description "Disclosed limitations carried as requirements on this document: (1) ex4pm is exact-pinned \"== 26.10.1\" because the third CalVer component is contract-bearing; no compatibility with other ex4pm releases is claimed or implied. (2) Three Notifier helper functions have no direct test reference in test/: managed_relationship_objects/1, resolve_object_relationships/3, and object_map/4 — they are exercised only indirectly, if at all; their behavior is UNSUPPORTED until directly witnessed. (3) BrceGate's admission callback is a pure placeholder. (4) ReceiptedAction's post-hook transactional commit failure is uncaptured (unverified for transactional data layers). (5) Without a declared object_type, the OCEL object type falls back to the resource module name — the extension's largest disclosed OCEL 2.0 nonconformance for non-opting resources. (6) Non-goals: no global notifier injection, no automatic Reactor middleware, no authority from projected results, no ALIVE claims from code existence." .
+
+# ------------------------------------------------------------- acceptance
+
+prd:acc-grounded-only a sj:AcceptanceCriterion ;
+    rdfs:label "Grounded-only claims" ;
+    dcterms:description "Every capability claim in this document names a real module in lib/ and, where a requirement is anchored, a real path under test/. A claim without both is a violation of this PRD." .
+
+prd:acc-ownership-boundary a sj:AcceptanceCriterion ;
+    rdfs:label "Ownership boundary preserved" ;
+    dcterms:description "AshEx4pm re-validates nothing that ex4pm already admits: envelope validation is delegated to Ex4pm.OCEL.validate_envelope/1 and ingest to Ex4pm.Stream.Ingest.ingest_envelope/2; no wasm, planner, admission, or evidence semantics are re-implemented locally." .
+
+prd:acc-pin-fidelity a sj:AcceptanceCriterion ;
+    rdfs:label "Exact-pin fidelity" ;
+    dcterms:description "mix.exs continues to declare {:ex4pm, \"== 26.10.1\"}; any widening of that pin invalidates this PRD's grounding until re-authored." .
+
+# -------------------------------------------------------------- falsifiers
+
+prd:falsifier-unshipped-capability a sj:Falsifier ;
+    rdfs:label "Unshipped-capability falsifier" ;
+    dcterms:description "Any capability described in this graph that has no corresponding module under lib/ or no anchored path under test/ refutes the PRD's grounding; e.g. if AshEx4pm.FerroplanSessions.repair/1 were absent from lib/ash_ex4pm/ferroplan_sessions.ex, the ferroplan projection claim is refuted." .
+
+prd:falsifier-ownership-violation a sj:Falsifier ;
+    rdfs:label "Ownership-violation falsifier" ;
+    dcterms:description "If AshEx4pm ever re-validates an envelope ex4pm already validated (a local validator shadowing Ex4pm.OCEL.validate_envelope/1) or implements wasm/planner semantics locally, the ownership-boundary claim is refuted." .
+
+prd:falsifier-pin-drift a sj:Falsifier ;
+    rdfs:label "Pin-drift falsifier" ;
+    dcterms:description "If mix.exs's ex4pm pin stops being \"== 26.10.1\" while this document still claims the pinned contract, the identity projection is refuted." .
+
+prd:falsifier-authority-widening a sj:Falsifier ;
+    rdfs:label "Authority-widening falsifier" ;
+    dcterms:description "If any projected capability, receipt, plan, forecast, or registry entry is treated as DO authority or ALIVE standing without an independent exact-head court receipt, the PRD's authority-ceiling claim (CONSTRUCT) is refuted." .
+
+# --------------------------------------------------------------- evidence
+
+prd:evidence-receipted-action-tests a sj:EvidenceRequirement ;
+    rdfs:label "Receipted-action test evidence" ;
+    dcterms:description "test/ash_ex4pm/receipted_action_test.exs anchors the BrceGate / ReceiptedAction claims." .
+
+prd:evidence-engine-run-tests a sj:EvidenceRequirement ;
+    rdfs:label "Engine-run test evidence" ;
+    dcterms:description "test/ash_ex4pm/engine_run_test.exs and test/ash_ex4pm_test.exs anchor the engine-run, notifier-envelope, call_log_bridge, and economic_isa claims." .
+
+prd:evidence-evidence-courts a sj:EvidenceRequirement ;
+    rdfs:label "Evidence-pack courts" ;
+    dcterms:description "test/ash_ex4pm/evidence_court.exs (standalone, EX4PM_ROOT real ex4pm) and test/ash_ex4pm/evidence_pack_test.exs (pinned hex ex4pm) anchor the ProcessEvidence digest, adapter validate/ingest, and RealtimeBridge invariants; test/ash_ex4pm/broadcaster_test.exs anchors the broadcaster opt." .
+
+prd:evidence-capability-tests a sj:EvidenceRequirement ;
+    rdfs:label "Capability-registry test evidence" ;
+    dcterms:description "test/ash_ex4pm/capabilities_test.exs, test/ash_ex4pm/capability_projection_test.exs, and test/ash_ex4pm/upgrade_contract_test.exs anchor the registry claims." .
+
+prd:evidence-wasm-tests a sj:EvidenceRequirement ;
+    rdfs:label "wasm test evidence" ;
+    dcterms:description "test/ash_ex4pm/wasm_runtime_test.exs and test/ash_ex4pm/wasm_engine_test.exs anchor the WasmRuntime claims." .
+
+prd:evidence-ferroplan-tests a sj:EvidenceRequirement ;
+    rdfs:label "ferroplan test evidence" ;
+    dcterms:description "test/ash_ex4pm/ferroplan_runtime_test.exs anchors both FerroplanRuntime and FerroplanSessions claims." .
