@@ -42,3 +42,11 @@ Every claim in this docs set is checked against the shipped modules:
   <https://github.com/seanchatmangpt/wasm4pm/blob/main/docs/INDEX.md>
 - ferroplan planning types:
   <https://github.com/seanchatmangpt/ferroplan/blob/main/docs/planning-types.md>
+
+## See Also (external sibling repositories)
+
+- ex4pm `docs/README.md` (`~/ex4pm`) — the core engine AshEx4pm wraps;
+  this repo pins `{:ex4pm, "== 26.10.1"}` (see `mix.exs` — the exact pin
+  exists because ex4pm's third CalVer component carries contract changes).
+- beam4pm `docs/diataxis/` (`~/beam4pm`) — the OCEL engine layered on the
+  ex4pm runtime; beam4pm consumes this repo via `{:ash_ex4pm, "~> 26.10"}`.
