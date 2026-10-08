@@ -11,6 +11,7 @@ Diátaxis routes by what you need:
 | Emit OCEL 2.0 events from an Ash resource, first steps | [Tutorial: Emit OCEL events from an Ash resource](tutorials/emit-ocel-events-from-an-ash-resource.md) |
 | Make an Ash action receipted (admission + bound consequence + idempotency) | [How-to: Run a receipted Ash action](how-to/run-a-receipted-ash-action.md) |
 | Look up a module, function, option, or refusal reason | [Reference: Public API](reference/api.md) |
+| Trace how this repo binds to the ex4pm engine, Reactor middleware, and the WASM embedding | [Reference: Process-Mining Binding Layers](reference/bindings.md) |
 | Understand the ownership layering, admission vs DO, and the evidence pack | [Explanation: Architecture](explanation/architecture.md) |
 
 ## Where each fact lives
@@ -21,6 +22,9 @@ Every claim in this docs set is checked against the shipped modules:
   `lib/ash_ex4pm/capabilities.ex`
 - DSL entities: `lib/ash_ex4pm/dsl.ex`; introspection: `lib/ash_ex4pm/info.ex`
 - OCEL notifier and optional realtime broadcaster: `lib/ash_ex4pm/notifier.ex`
+- Process-mining binding layers: `docs/diataxis/reference/bindings.md`
+  (ex4pm pin in `mix.exs`, `lib/ash_ex4pm/reactor/ocel_middleware.ex`,
+  `lib/ash_ex4pm/evidence/`, vendored pack in `priv/ggen/vendor/`)
 - BRCE changes: `lib/ash_ex4pm/changes/brce_gate.ex`,
   `lib/ash_ex4pm/changes/receipted_action.ex`
 - Runtime seams: `lib/ash_ex4pm/wasm_runtime.ex`,
