@@ -4,6 +4,19 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [26.10.8] - 2026-10-08
+
+Version alignment release: `@version` 26.10.4 → 26.10.8, aligning the
+ash_ex4pm and ex4pm release trains on one version point. No code changes in
+this release; also records that 26.10.4 (`AshEx4pm.Reactor.OcelMiddleware`,
+commit af0efcb) shipped on main without a CHANGELOG entry — that omission is
+corrected here by this record.
+
+### Public contract
+
+- Ash action surfaces and receipt shapes: UNCHANGED.
+- `priv/ggen/vendor/` pack pins (PACKS.lock.json, provenance.ttl): UNCHANGED.
+
 ## [26.10.3] - 2026-10-02
 
 ### Added
