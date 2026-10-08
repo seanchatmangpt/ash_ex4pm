@@ -12,6 +12,7 @@ Diátaxis routes by what you need:
 | Make an Ash action receipted (admission + bound consequence + idempotency) | [How-to: Run a receipted Ash action](how-to/run-a-receipted-ash-action.md) |
 | Look up a module, function, option, or refusal reason | [Reference: Public API](reference/api.md) |
 | Trace how this repo binds to the ex4pm engine, Reactor middleware, and the WASM embedding | [Reference: Process-Mining Binding Layers](reference/bindings.md) |
+| Browse every module and def signature (generated scaffold) | [Reference: Generated Reference](reference/generated/README.md) |
 | Understand the ownership layering, admission vs DO, and the evidence pack | [Explanation: Architecture](explanation/architecture.md) |
 
 ## Where each fact lives
