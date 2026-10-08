@@ -13,8 +13,8 @@ defmodule AshEx4pm.Capabilities do
 
   @base_docs %{
     index: "docs/INDEX.md",
-    reference: "docs/reference/capabilities.md",
-    explanation: "docs/explanation/architecture.md"
+    reference: "docs/diataxis/reference/api.md",
+    explanation: "docs/diataxis/explanation/architecture.md"
   }
 
   @wasm_docs "https://github.com/seanchatmangpt/wasm4pm/blob/main/docs/INDEX.md"

@@ -113,7 +113,7 @@ upstream capability
 
 The registry records the canonical owner, Ash projection, function/arity,
 boundary, authority semantics, DO authority, and documentation for each
-projected capability. See [Capability reference](docs/reference/capabilities.md).
+projected capability. See [Capability reference](docs/diataxis/reference/api.md).
 
 ## wasm4pm through AshEx4pm.WasmRuntime
 

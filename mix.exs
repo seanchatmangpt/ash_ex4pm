@@ -85,8 +85,9 @@ defmodule AshEx4pm.MixProject do
       extras: [
         "README.md",
         "docs/INDEX.md",
-        "docs/reference/capabilities.md",
-        "docs/explanation/architecture.md",
+        "docs/diataxis/index.md",
+        "docs/diataxis/reference/api.md",
+        "docs/diataxis/explanation/architecture.md",
         "docs/PRD-ARD-v26.10.2.md"
       ]
     ]

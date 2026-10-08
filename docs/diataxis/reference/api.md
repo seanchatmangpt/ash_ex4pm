@@ -25,6 +25,37 @@ Registry ids (`lib/ash_ex4pm/capabilities.ex`): `:ocel_event_emission`,
 `:capability_projection`, `:economic_isa_registry`. Existence in the
 registry means PROJECTED, not ALIVE and not authorized.
 
+### Capability descriptor fields
+
+Each `AshEx4pm.Capability` contains:
+
+| Field | Meaning |
+|---|---|
+| `id` | Stable AshEx4pm projection identifier |
+| `category` | Process evidence, planning, analysis, admission, actuation, etc. |
+| `owner` | Canonical semantic owner |
+| `projection` | Ash-facing module |
+| `operation` / `arity` | Export that makes the projection concrete |
+| `boundary` | `:observe`, `:inspect`, `:analyze`, `:construct`, `:admit`, or `:do` |
+| `authority` | `:none`, `:required`, or operation-dependent |
+| `do_authority?` | Whether this projection can cross consequential DO |
+| `standing` | Optional inspection-only standing callback |
+| `docs` | Local and canonical upstream documentation |
+
+### Boundary and planning law
+
+~~~text
+KNOWN != PROJECTED != AVAILABLE != ADMITTED != ALIVE != AUTHORIZED != DO
+~~~
+
+A registry entry establishes PROJECTED. `available?/1` establishes that the
+Ash-facing export is present. `standing/1` can return runtime evidence where
+the projection supports an inspection-only probe. Only `receipted_action`
+declares `do_authority?` true in this release; `brce_admission` is boundary
+`:admit`, `do_authority?` false. Every ferroplan capability is boundary
+`:construct`, `do_authority?` false — a plan, repair, probe, policy or
+replan is a candidate, not authorization.
+
 ## DSL (`lib/ash_ex4pm/dsl.ex`)
 
 Section `ex4pm` (option `provenance_source`, default `:ash_ex4pm`,
