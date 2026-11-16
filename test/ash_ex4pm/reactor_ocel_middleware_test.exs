@@ -49,8 +49,14 @@ defmodule AshEx4pm.Reactor.OcelMiddlewareTest do
 
     try do
       assert {:ok, 8} = Reactor.run(SampleReactor, %{value: 4})
-      assert_receive {:telemetry_event, ^ref, [:ash_ex4pm, :reactor, :event], _meas, %{step: :double}}, 1000
-      assert_receive {:telemetry_event, ^ref, [:ash_ex4pm, :reactor, :complete], _meas, %{result: 8}}, 1000
+
+      assert_receive {:telemetry_event, ^ref, [:ash_ex4pm, :reactor, :event], _meas,
+                      %{step: :double}},
+                     1000
+
+      assert_receive {:telemetry_event, ^ref, [:ash_ex4pm, :reactor, :complete], _meas,
+                      %{result: 8}},
+                     1000
     after
       :telemetry.detach(handler_id)
     end

@@ -10,18 +10,18 @@ defmodule AshEx4pm.UpgradeContractTest do
     refute Code.ensure_loaded?(AshEx4pm.Ferroplan)
   end
 
-  test "release 26.10.1 contract: @version, exact ex4pm pin, lock checksum, changelog entry" do
+  test "release 26.10.17 contract: @version, exact ex4pm pin, lock checksum, changelog entry" do
     mix_exs = File.read!("mix.exs")
 
-    assert mix_exs =~ ~s(@version "26.10.8")
-    assert mix_exs =~ ~s({:ex4pm, "== 26.10.1"})
+    assert mix_exs =~ ~s(@version "26.10.17")
+    assert mix_exs =~ ~s({:ex4pm, "== 26.10.17"})
 
     lock = File.read!("mix.lock")
 
     assert lock =~
-             ~s("ex4pm": {:hex, :ex4pm, "26.10.1", "269ee75f8226945538ff0627fe5267210a08e951fa6289991e1d3d0bb110782c")
+             ~s("ex4pm": {:hex, :ex4pm, "26.10.17", "53bafd580e19e3624295e89612cce1df82be0dfccf214924e6b6481008a16e7e")
 
-    assert File.read!("CHANGELOG.md") =~ "## [26.10.1] - 2026-10-01"
+    assert File.read!("CHANGELOG.md") =~ "## [26.10.17] - 2026-10-18"
   end
 
   test "re-ingesting a byte-identical envelope is ignored with the original receipt hash" do

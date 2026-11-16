@@ -1,7 +1,7 @@
 {
   "schema": "ash_ex4pm.ggen.vendor-lock/v1",
   "source_repo": "ggen-marketplace",
-  "source_git_sha": "e8e2c3066e7404d097cb21083d05e6814f9a3dcc",
+  "source_git_sha": "0a299b821ff5095489627997a93657f6c318fda1",
   "packs": [
     {
       "name": "ash-ex4pm-evidence-pack",
@@ -69,7 +69,7 @@
   "generated": [
     {
       "path": "provenance.ttl",
-      "sha256": "2dc15dfa11a2d313ff763424856ed0e2f6c58b52ef4911515d7f66b2db7d1ad6"
+      "sha256": "90a9158ec60341ae51c4ce99e2bde3b30c826cf8c455d20ea19a0d95e8ad5ee9"
     }
   ]
 }

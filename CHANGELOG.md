@@ -4,6 +4,18 @@ All notable changes to `ash_ex4pm` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [26.10.17] - 2026-10-18
+ 
+Fleet release v26.10.17:
+- Upgraded `ex4pm` pin to `== 26.10.17` (Hex package `53bafd580e19e3624295e89612cce1df82be0dfccf214924e6b6481008a16e7e`).
+- Vendored marketplace pack `ash-ex4pm-evidence-pack` synced from `~/ggen-marketplace` @ commit `0a299b8`.
+- Synchronized release version across `ex4pm` and `ash_ex4pm`.
+
+### Public contract
+
+- Ash action surfaces and receipt shapes: UNCHANGED.
+- `priv/ggen/vendor/` pack pins (PACKS.lock.json, provenance.ttl): UPDATED to `0a299b8`.
+
 ## [26.10.8] - 2026-10-08
 
 Version alignment release: `@version` 26.10.4 → 26.10.8, aligning the
